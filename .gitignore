@@ -119,3 +119,7 @@ WpfApp_BackupSaves/WpfApp_BackupSaves/Assets/icon-png/
 
 # lean-ctx local cache
 **/.lean-ctx/
+
+# Local release packages (zip + notes); do not commit binaries
+/releases/
+/artifacts/

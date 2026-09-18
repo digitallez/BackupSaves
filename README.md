@@ -38,6 +38,27 @@ dotnet build WpfApp_BackupSaves.sln -c Release
 
 Без инкремента: `dotnet build -c Release -p:NoVersionIncrement=true`
 
+### Выложить проверенный Release на GitHub (без пересборки)
+
+1. В Visual Studio: **Release** → собрать → проверить руками.
+2. Двойной клик по `upload-release.bat` в корне репо (или из cmd):
+
+```bat
+upload-release.bat
+```
+
+Скрипт возьмёт уже собранное из  
+`WpfApp_BackupSaves\WpfApp_BackupSaves\bin\Release\net9.0-windows*\`,  
+прочитает версию из `BackupSaves.exe`, сделает `releases\BackupSaves-<ver>.zip`  
+и опубликует в [BackupSaves-Releases](https://github.com/digitallez/BackupSaves-Releases)  
+(`gh auth login` один раз).
+
+Только zip без upload: `upload-release.bat -NoUpload`
+
+Альтернатива со сборкой через `dotnet publish`: `.\publish-release.ps1 -UploadToReleasesRepo`.
+
+При старте GUI приложение само проверяет latest release и предлагает обновиться.
+
 ## Запуск
 
 - GUI: `BackupSaves.exe`
@@ -45,8 +66,9 @@ dotnet build WpfApp_BackupSaves.sln -c Release
 
 Настройки и логи:
 
+- `%LocalAppData%\BackupSaves\logs\yyyy-MM-dd.log` (кнопка **Логи** в статус-баре)
+- `%LocalAppData%\BackupSaves\logs\update-apply.log` — лог автообновления
 - `%AppData%\BackupSaves\settings.json`
-- `%AppData%\BackupSaves\logs\yyyy-MM-dd.log`
 
 Архивы: `{BackupRoot}/{slug}/{slug}_yyyy-MM-dd_HH-mm-ss.7z|.zip`
 
@@ -61,6 +83,10 @@ WpfApp_BackupSaves      — UI, tray, live-список, CLI entry
 UI и Scheduler не пишут архивы напрямую — только через Core.
 
 Подробности: [docs/DEV-PLAN.md](docs/DEV-PLAN.md), [docs/TZ-SHORT.md](docs/TZ-SHORT.md).
+
+## Статус MVP
+
+По [плану](docs/DEV-PLAN.md) этапы 0–6 и DoD закрыты. Рекомендуемая установка: `%LocalAppData%\BackupSaves` (без Program Files — автообновление без UAC).
 
 ## Вне scope (намеренно)
 

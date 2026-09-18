@@ -19,8 +19,12 @@
         </ItemsPanelTemplate>
       </StatusBar.ItemsPanel>
       <StatusBarItem DockPanel.Dock="Right">
-        <Button x:Name="ThemeToggleButton" Content="☀ Светлая" Padding="10,2" Margin="8,0"
-                Click="ThemeToggle_Click" ToolTip="Переключить тему"/>
+        <StackPanel Orientation="Horizontal">
+          <Button Content="Логи" Padding="10,2" Margin="0,0,8,0"
+                  Click="OpenLogs_Click" ToolTip="Открыть папку логов"/>
+          <Button x:Name="ThemeToggleButton" Content="☀ Светлая" Padding="10,2" Margin="0,0,8,0"
+                  Click="ThemeToggle_Click" ToolTip="Переключить тему"/>
+        </StackPanel>
       </StatusBarItem>
       <StatusBarItem>
         <TextBlock Text="{Binding Status}" Foreground="{DynamicResource PrimaryTextBrush}"/>

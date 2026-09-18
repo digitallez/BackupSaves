@@ -24,7 +24,9 @@ public partial class MainWindow : Window
     private WinForms.NotifyIcon? _tray;
     private bool _reallyClose;
     private bool _cleanedUp;
+    private bool _updateCheckStarted;
     private AppSettings _app = new();
+    private readonly IUpdateChecker _updateChecker = new GitHubReleaseUpdateChecker();
 
     public MainWindow()
     {
@@ -89,9 +91,135 @@ public partial class MainWindow : Window
         ReloadProfilesUi();
         ReloadHistoryUi();
         _watcher.Watch(_app.Profiles);
-        _vm.Status = $"Настройки: {_settings.SettingsPath}";
+        _vm.Status = $"Логи: {AppLog.Default.LogDirectory}";
         AppLog.Default.Info("App",
             $"MainWindow loaded; v={AppVersion.Current}; profiles={_app.Profiles.Count}; logDir={AppLog.Default.LogDirectory}");
+
+        if (!_updateCheckStarted)
+        {
+            _updateCheckStarted = true;
+            _ = CheckForUpdatesAsync();
+        }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        try
+        {
+            var release = await _updateChecker.GetNewerReleaseAsync();
+            if (release is null)
+                return;
+
+            if (string.Equals(_app.Ui.SkippedUpdateVersion, release.Version, StringComparison.OrdinalIgnoreCase))
+            {
+                AppLog.Default.Info("Update", $"Skipped version {release.Version} (user choice)");
+                return;
+            }
+
+            // Already scheduled for exit
+            if (string.Equals(_app.Ui.PendingUpdateVersion, release.Version, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(_app.Ui.PendingUpdateZipPath)
+                && File.Exists(_app.Ui.PendingUpdateZipPath))
+            {
+                _vm.Status = $"Обновление {release.Version} будет установлено при выходе";
+                return;
+            }
+
+            var choice = UpdateChoice.LaterAskAgain;
+            await Dispatcher.InvokeAsync(() =>
+            {
+                var dlg = new UpdateAvailableWindow(AppVersion.Current, release.Version, release.ReleaseNotes)
+                {
+                    Owner = this
+                };
+                dlg.ShowDialog();
+                choice = dlg.Choice;
+            });
+
+            switch (choice)
+            {
+                case UpdateChoice.UpdateNow:
+                    await DownloadAndApplyNowAsync(release);
+                    break;
+                case UpdateChoice.UpdateOnClose:
+                    await DownloadForDeferredUpdateAsync(release);
+                    break;
+                case UpdateChoice.SkipThisVersion:
+                    _app.Ui.SkippedUpdateVersion = release.Version;
+                    _app.Ui.PendingUpdateVersion = null;
+                    _app.Ui.PendingUpdateZipPath = null;
+                    await _settings.SaveAsync(_app);
+                    AppLog.Default.Info("Update", $"User skipped version {release.Version}");
+                    _vm.Status = $"Версия {release.Version} пропущена";
+                    break;
+                default:
+                    AppLog.Default.Info("Update", "User postponed update prompt");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Update check failed", ex);
+            _vm.Status = "Проверка обновлений не удалась";
+        }
+    }
+
+    private async Task DownloadAndApplyNowAsync(ReleaseInfo release)
+    {
+        _vm.IsBusy = true;
+        _vm.Status = $"Скачивание {release.Version}…";
+        try
+        {
+            var progress = new Progress<double>(p =>
+                _vm.Status = $"Скачивание {release.Version}… {(int)(p * 100)}%");
+            var zip = await UpdateInstaller.DownloadAsync(release, progress);
+            _app.Ui.PendingUpdateVersion = null;
+            _app.Ui.PendingUpdateZipPath = null;
+            await _settings.SaveAsync(_app);
+
+            AppLog.Default.Info("Update", $"Applying now → {release.Version}");
+            _reallyClose = true;
+            CleanupOnExit();
+            UpdateInstaller.ApplyAndExit(zip, restart: true);
+            System.Windows.Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Update now failed", ex);
+            MessageBox.Show(this, $"Не удалось обновить:\n{ex.Message}", "Обновление",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            _vm.IsBusy = false;
+        }
+    }
+
+    private async Task DownloadForDeferredUpdateAsync(ReleaseInfo release)
+    {
+        _vm.IsBusy = true;
+        _vm.Status = $"Скачивание {release.Version} (установится при выходе)…";
+        try
+        {
+            var progress = new Progress<double>(p =>
+                _vm.Status = $"Скачивание {release.Version}… {(int)(p * 100)}%");
+            var zip = await UpdateInstaller.DownloadAsync(release, progress);
+            _app.Ui.PendingUpdateVersion = release.Version;
+            _app.Ui.PendingUpdateZipPath = zip;
+            await _settings.SaveAsync(_app);
+            AppLog.Default.Info("Update", $"Deferred update ready: {release.Version} @ {zip}");
+            _vm.Status = $"Обновление {release.Version} установится при выходе";
+            MessageBox.Show(this,
+                $"Версия {release.Version} скачана.\nОна будет установлена при выходе из приложения (без автозапуска).",
+                "Обновление", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Deferred download failed", ex);
+            MessageBox.Show(this, $"Не удалось скачать обновление:\n{ex.Message}", "Обновление",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _vm.IsBusy = false;
+        }
     }
 
     private async void ThemeToggle_Click(object sender, RoutedEventArgs e)
@@ -102,6 +230,29 @@ public partial class MainWindow : Window
         AppLog.Default.Info("Settings", $"Смена темы → {next}");
         await _settings.SaveAsync(_app);
         _vm.Status = next == AppTheme.Dark ? "Тема: тёмная" : "Тема: светлая";
+    }
+
+    private void OpenLogs_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dir = AppLog.Default.LogDirectory;
+            Directory.CreateDirectory(dir);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{dir}\"",
+                UseShellExecute = true
+            });
+            _vm.Status = $"Логи: {dir}";
+            AppLog.Default.Info("App", $"Opened log folder: {dir}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Open logs folder failed", ex);
+            MessageBox.Show(this, $"Не удалось открыть папку логов:\n{ex.Message}", "Логи",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void UpdateThemeToggleCaption()
@@ -340,6 +491,7 @@ public partial class MainWindow : Window
         if (_reallyClose)
         {
             CleanupOnExit();
+            TryApplyPendingUpdateOnExit();
             return;
         }
 
@@ -360,6 +512,7 @@ public partial class MainWindow : Window
                 _reallyClose = true;
                 e.Cancel = false;
                 CleanupOnExit();
+                TryApplyPendingUpdateOnExit();
                 break;
             default:
                 AppLog.Default.Info("App", "Закрытие отменено");
@@ -378,6 +531,35 @@ public partial class MainWindow : Window
             _tray.Visible = false;
             _tray.Dispose();
             _tray = null;
+        }
+    }
+
+    private void TryApplyPendingUpdateOnExit()
+    {
+        var zip = _app.Ui.PendingUpdateZipPath;
+        var ver = _app.Ui.PendingUpdateVersion;
+        if (string.IsNullOrWhiteSpace(zip) || string.IsNullOrWhiteSpace(ver))
+            return;
+
+        if (!File.Exists(zip))
+        {
+            AppLog.Default.Warn("Update", $"Pending zip missing: {zip}");
+            return;
+        }
+
+        try
+        {
+            // clear pending so next launch doesn't re-apply
+            _app.Ui.PendingUpdateZipPath = null;
+            _app.Ui.PendingUpdateVersion = null;
+            _settings.Save(_app);
+
+            AppLog.Default.Info("Update", $"Applying deferred update {ver} on exit (no restart)");
+            UpdateInstaller.ApplyAndExit(zip, restart: false);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Deferred apply failed", ex);
         }
     }
 }
