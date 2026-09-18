@@ -30,17 +30,38 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
           </Grid.RowDefinitions>
 
           <TextBlock Text="Имя" VerticalAlignment="Center"/>
-          <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,4" Height="28"/>
+          <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,4" Height="28"
+                   VerticalContentAlignment="Center"/>
 
-          <TextBlock Text="BackupRoot" Grid.Row="1" VerticalAlignment="Center"/>
+          <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="Папка бэкапов" VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="300" TextWrapping="Wrap"
+                             Text="Корневая папка, куда сохраняются архивы этого профиля. Внутри неё создаётся подпапка с именем профиля (slug), а архивы получают имена вида имя_дата_время.7z|.zip."/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
           <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,4">
             <Button DockPanel.Dock="Right" Content="…" Width="36" Height="28" Margin="6,0,0,0" Click="BrowseRoot_Click"/>
-            <TextBox x:Name="RootBox" Height="28"/>
+            <TextBox x:Name="RootBox" Height="28" VerticalContentAlignment="Center"/>
           </DockPanel>
 
           <TextBlock Text="Формат" Grid.Row="2" VerticalAlignment="Center"/>
@@ -50,36 +71,108 @@
             <ComboBoxItem Content="ZIP (запасной)" Tag="Zip"/>
           </ComboBox>
 
-          <TextBlock Text="Retention N" Grid.Row="3" VerticalAlignment="Center"/>
-          <TextBox x:Name="RetentionBox" Grid.Row="3" Grid.Column="1" Margin="0,4" Height="28" Text="10"/>
+          <StackPanel Grid.Row="3" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="Лимит архивов" VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="280" TextWrapping="Wrap"
+                             Text="Сколько последних архивов оставлять для этого профиля. После успешного бэкапа более старые файлы удаляются. Например, при значении 10 хранятся только 10 самых свежих архивов."/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+          <TextBox x:Name="RetentionBox" Grid.Row="3" Grid.Column="1" Margin="0,4"
+                   Width="110" Height="28" HorizontalAlignment="Left" Text="10"
+                   TextAlignment="Center" VerticalContentAlignment="Center"/>
 
-          <TextBlock Text="Расписание" Grid.Row="4" VerticalAlignment="Center"/>
-          <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,4">
-            <CheckBox x:Name="ScheduleEnabled" Content="Включить Task Scheduler" Margin="0,0,0,6"/>
-            <DockPanel>
-              <ComboBox x:Name="ScheduleKindBox" Width="140" Height="28" SelectedIndex="0">
-                <ComboBoxItem Content="Daily" Tag="Daily"/>
-                <ComboBoxItem Content="Weekly" Tag="Weekly"/>
-                <ComboBoxItem Content="OnLogon" Tag="OnLogon"/>
-                <ComboBoxItem Content="Interval" Tag="Interval"/>
-              </ComboBox>
-              <TextBlock Text="Время" VerticalAlignment="Center" Margin="12,0,6,0"/>
-              <TextBox x:Name="TimeBox" Width="70" Height="28" Text="02:00"/>
-              <TextBlock Text="Интервал мин" VerticalAlignment="Center" Margin="12,0,6,0"/>
-              <TextBox x:Name="IntervalBox" Width="60" Height="28" Text="60"/>
-            </DockPanel>
+          <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,4,0,4" Orientation="Horizontal">
+            <CheckBox x:Name="ChecksumSkipBox"
+                      Content="Не создавать архив, если файлы не изменились (checksum)"
+                      VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                             Text="Перед бэкапом считается SHA-256 всех исходных файлов. Если набор файлов и их checksum совпадают с прошлым успешным бэкапом, новый архив не создаётся. Удобно для расписания и автобэкапа в GUI."/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
           </StackPanel>
 
-          <TextBlock Text="Источники" Grid.Row="5" Margin="0,12,0,4" FontWeight="SemiBold" Grid.ColumnSpan="2"/>
+          <CheckBox x:Name="ScheduleEnabled" Grid.Row="5" Grid.Column="1"
+                    Content="Включить Task Scheduler" Margin="0,8,0,4"
+                    VerticalAlignment="Center"
+                    Checked="ScheduleMode_Changed" Unchecked="ScheduleMode_Changed"/>
 
-          <DockPanel Grid.Row="6" Grid.ColumnSpan="2" Margin="0,0,0,6">
+          <StackPanel Grid.Row="6" Grid.Column="1" Margin="0,0,0,4" Orientation="Horizontal">
+            <CheckBox x:Name="InAppScheduleEnabled"
+                      Content="Автобэкап в программе (пока открыта)"
+                      VerticalAlignment="Center"
+                      Checked="ScheduleMode_Changed" Unchecked="ScheduleMode_Changed"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="300" TextWrapping="Wrap"
+                             Text="Если Task Scheduler выключен, программа сама будет делать бэкап с указанным интервалом (мин), пока окно BackupSaves открыто (в том числе в трее). При закрытии приложения автобэкап останавливается."/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+
+          <TextBlock Text="Расписание" Grid.Row="7" VerticalAlignment="Center"/>
+          <DockPanel Grid.Row="7" Grid.Column="1" Margin="0,4" VerticalAlignment="Center">
+            <TextBox x:Name="IntervalBox" DockPanel.Dock="Right" Width="60" Height="28" Text="60"
+                     TextAlignment="Center" VerticalContentAlignment="Center"
+                     VerticalAlignment="Center"/>
+            <TextBlock DockPanel.Dock="Right" Text="Интервал мин" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <ComboBox x:Name="ScheduleKindBox" Width="110" Height="28" SelectedIndex="0"
+                      VerticalAlignment="Center" HorizontalAlignment="Left">
+              <ComboBoxItem Content="Daily" Tag="Daily"/>
+              <ComboBoxItem Content="Weekly" Tag="Weekly"/>
+              <ComboBoxItem Content="OnLogon" Tag="OnLogon"/>
+              <ComboBoxItem Content="Interval" Tag="Interval"/>
+            </ComboBox>
+            <TextBlock Text="Время" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <TextBox x:Name="TimeBox" Width="70" Height="28" Text="02:00"
+                     TextAlignment="Center" VerticalContentAlignment="Center"
+                     VerticalAlignment="Center"/>
+          </DockPanel>
+
+          <TextBlock Text="Источники" Grid.Row="8" Margin="0,12,0,4" FontWeight="SemiBold" Grid.ColumnSpan="2"/>
+
+          <DockPanel Grid.Row="9" Grid.ColumnSpan="2" Margin="0,0,0,6">
             <Button DockPanel.Dock="Right" Content="Файл…" Width="80" Height="28" Margin="6,0,0,0" Click="AddFile_Click"/>
             <Button DockPanel.Dock="Right" Content="Папка…" Width="80" Height="28" Click="AddFolder_Click"/>
             <Button DockPanel.Dock="Right" Content="Удалить" Width="80" Height="28" Margin="0,0,6,0" Click="RemoveSource_Click"/>
             <TextBlock Text="Файлы и папки для бэкапа" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
           </DockPanel>
 
-          <ListBox x:Name="SourcesList" Grid.Row="7" Grid.ColumnSpan="2" MinHeight="140"
+          <ListBox x:Name="SourcesList" Grid.Row="10" Grid.ColumnSpan="2" MinHeight="140"
                    DisplayMemberPath="Path"/>
         </Grid>
       </ScrollViewer>

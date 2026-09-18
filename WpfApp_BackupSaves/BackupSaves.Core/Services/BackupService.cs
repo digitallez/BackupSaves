@@ -143,6 +143,32 @@ public sealed class BackupService : IBackupService
             if (files.Count == 0)
                 return Fail("Нет файлов для бэкапа.");
 
+            List<FileChecksumEntry>? checksums = null;
+            if (profile.SkipUnchangedByChecksum)
+            {
+                AppLog.Default.Info("Backup", $"Checksum: считаем SHA-256 для {files.Count} файл(ов)…");
+                try
+                {
+                    checksums = await ChecksumService.ComputeAsync(
+                        files.Select(f => f.SourceFilePath), ct);
+                }
+                catch (IOException ex)
+                {
+                    AppLog.Default.Error("Backup", "IO при подсчёте checksum", ex);
+                    return BackupResult.Fail($"Не удалось прочитать файл для checksum: {ex.Message}");
+                }
+
+                var previous = ChecksumService.TryLoad(archiveDir);
+                if (previous is not null && ChecksumService.AreEqual(checksums, previous.Files))
+                {
+                    AppLog.Default.Info("Backup",
+                        $"Checksum: изменений нет ({checksums.Count} файл(ов)) — архив не создаём");
+                    return BackupResult.SkippedUnchanged(checksums.Count);
+                }
+
+                AppLog.Default.Info("Backup", "Checksum: есть изменения — создаём архив");
+            }
+
             var manifest = new Manifest
             {
                 Version = 1,
@@ -178,6 +204,21 @@ public sealed class BackupService : IBackupService
 
             File.Move(tempPath, finalPath, overwrite: false);
             var deleted = _retention.Apply(archiveDir, profile.Format, profile.RetentionCount);
+
+            if (profile.SkipUnchangedByChecksum)
+            {
+                try
+                {
+                    checksums ??= await ChecksumService.ComputeAsync(
+                        files.Select(f => f.SourceFilePath), ct);
+                    ChecksumService.Save(archiveDir, checksums);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Default.Warn("Backup", $"Не удалось сохранить checksum snapshot: {ex.Message}");
+                }
+            }
+
             AppLog.Default.Info("Backup",
                 $"Архив готов: \"{finalPath}\" (atomic rename), retention deleted={deleted}");
 

@@ -19,4 +19,9 @@
   <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#E8E8E8"/>
   <SolidColorBrush x:Key="TitleBarInactiveForegroundBrush" Color="#A0A0A0"/>
   <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="#3E3E42"/>
+  <SolidColorBrush x:Key="TooltipBackgroundBrush" Color="#2D2D2D"/>
+  <SolidColorBrush x:Key="TooltipForegroundBrush" Color="#E8E8E8"/>
+  <!-- Default string ToolTips use system Info* brushes -->
+  <SolidColorBrush x:Key="{x:Static SystemColors.InfoBrushKey}" Color="#2D2D2D"/>
+  <SolidColorBrush x:Key="{x:Static SystemColors.InfoTextBrushKey}" Color="#E8E8E8"/>
 </ResourceDictionary>

@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private bool _updateCheckStarted;
     private AppSettings _app = new();
     private readonly IUpdateChecker _updateChecker = new GitHubReleaseUpdateChecker();
+    private InAppBackupScheduler? _inAppScheduler;
 
     public MainWindow()
     {
@@ -94,6 +95,9 @@ public partial class MainWindow : Window
         _vm.Status = $"Логи: {AppLog.Default.LogDirectory}";
         AppLog.Default.Info("App",
             $"MainWindow loaded; v={AppVersion.Current}; profiles={_app.Profiles.Count}; logDir={AppLog.Default.LogDirectory}");
+
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
 
         if (!_updateCheckStarted)
         {
@@ -278,7 +282,15 @@ public partial class MainWindow : Window
     {
         _vm.History.Clear();
         foreach (var h in _app.History.Take(50))
+        {
+            if (string.IsNullOrWhiteSpace(h.ProfileName))
+            {
+                h.ProfileName = _app.Profiles.FirstOrDefault(p => p.Id == h.ProfileId)?.Name
+                               ?? "Профиль удалён";
+            }
+
             _vm.History.Add(h);
+        }
     }
 
     private void Profiles_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -346,6 +358,54 @@ public partial class MainWindow : Window
         }
 
         _watcher.Watch(_app.Profiles);
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
+    }
+
+    private void EnsureInAppScheduler()
+    {
+        if (_inAppScheduler is not null)
+            return;
+
+        _inAppScheduler = new InAppBackupScheduler(
+            getApp: () => _app,
+            runBackup: RunInAppBackupAsync,
+            setStatus: s => _vm.Status = s);
+    }
+
+    private async Task RunInAppBackupAsync(Guid profileId)
+    {
+        if (_vm.IsBusy)
+        {
+            AppLog.Default.Info("InAppSchedule", $"Skip {profileId:N}: UI busy");
+            return;
+        }
+
+        _vm.IsBusy = true;
+        try
+        {
+            var result = await _runner.RunProfileAsync(profileId, RunTrigger.InApp);
+            _app = await _settings.LoadAsync();
+
+            var profile = _app.Profiles.FirstOrDefault(p => p.Id == profileId);
+            if (profile is not null)
+            {
+                profile.Schedule.LastInAppBackupUtc = DateTimeOffset.UtcNow;
+                await _settings.SaveAsync(_app);
+            }
+
+            ReloadHistoryUi();
+            RefreshArchives();
+            _vm.Status = result.Skipped
+                ? (result.StatusMessage ?? "Изменений нет — архив не создан")
+                : result.Success
+                    ? $"Автобэкап OK: {result.ArchivePath}"
+                    : $"Автобэкап ошибка: {result.ErrorMessage}";
+        }
+        finally
+        {
+            _vm.IsBusy = false;
+        }
     }
 
     private async void AddProfile_Click(object sender, RoutedEventArgs e)
@@ -358,6 +418,8 @@ public partial class MainWindow : Window
         AppLog.Default.Info("Settings",
             $"Профиль создан: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} root=\"{dlg.Profile.BackupRoot}\"");
         await PersistAndSyncSchedulerAsync(dlg.Profile);
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
         ReloadProfilesUi();
         _vm.SelectedProfile = _vm.Profiles.FirstOrDefault(p => p.Id == dlg.Profile.Id);
         _vm.Status = $"Профиль «{dlg.Profile.Name}» создан";
@@ -374,8 +436,10 @@ public partial class MainWindow : Window
         if (idx < 0) return;
         _app.Profiles[idx] = dlg.Profile;
         AppLog.Default.Info("Settings",
-            $"Профиль изменён: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} schedule={dlg.Profile.Schedule.Enabled}/{dlg.Profile.Schedule.Kind}");
+            $"Профиль изменён: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} schedule={dlg.Profile.Schedule.Enabled}/{dlg.Profile.Schedule.Kind} inApp={dlg.Profile.Schedule.InAppEnabled}");
         await PersistAndSyncSchedulerAsync(dlg.Profile);
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
         ReloadProfilesUi();
         _vm.SelectedProfile = _vm.Profiles.FirstOrDefault(p => p.Id == dlg.Profile.Id);
         _vm.Status = $"Профиль «{dlg.Profile.Name}» сохранён";
@@ -410,9 +474,11 @@ public partial class MainWindow : Window
             _app = await _settings.LoadAsync();
             ReloadHistoryUi();
             RefreshArchives();
-            _vm.Status = result.Success
-                ? $"OK: {result.ArchivePath}"
-                : $"Ошибка: {result.ErrorMessage}";
+            _vm.Status = result.Skipped
+                ? (result.StatusMessage ?? "Изменений нет — архив не создан")
+                : result.Success
+                    ? $"OK: {result.ArchivePath}"
+                    : $"Ошибка: {result.ErrorMessage}";
             if (!result.Success)
                 MessageBox.Show(this, result.ErrorMessage, "Бэкап", MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -424,11 +490,16 @@ public partial class MainWindow : Window
 
     private async void Restore_Click(object sender, RoutedEventArgs e)
     {
+        await RestoreSelectedArchiveAsync();
+    }
+
+    private async Task RestoreSelectedArchiveAsync()
+    {
         if (_vm.SelectedArchive is null || _vm.IsBusy) return;
 
         var confirm = MessageBox.Show(this,
             $"Восстановить все файлы из «{_vm.SelectedArchive.Name}» в исходные папки?\nСуществующие файлы будут перезаписаны.",
-            "Restore", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            "Восстановление", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes)
         {
             AppLog.Default.Info("Restore", "Пользователь отменил confirm");
@@ -437,14 +508,14 @@ public partial class MainWindow : Window
 
         AppLog.Default.Info("Restore", $"UI restore: \"{_vm.SelectedArchive.Path}\"");
         _vm.IsBusy = true;
-        _vm.Status = "Restore…";
+        _vm.Status = "Восстановление…";
         try
         {
             var result = await _restore.RestoreAsync(_vm.SelectedArchive.Path, overwrite: true);
             if (result.Success)
             {
-                _vm.Status = $"Restore OK: {result.RestoredCount} файлов";
-                MessageBox.Show(this, $"Восстановлено файлов: {result.RestoredCount}", "Restore",
+                _vm.Status = $"Восстановлено: {result.RestoredCount} файлов";
+                MessageBox.Show(this, $"Восстановлено файлов: {result.RestoredCount}", "Восстановление",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
@@ -453,12 +524,78 @@ public partial class MainWindow : Window
                 if (result.Errors.Count > 0)
                     details += "\n\n" + string.Join("\n", result.Errors.Take(15).Select(x => $"{x.SourcePath}: {x.Message}"));
                 _vm.Status = details.Split('\n')[0];
-                MessageBox.Show(this, details, "Restore — ошибки", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, details, "Восстановление — ошибки", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
         finally
         {
             _vm.IsBusy = false;
+        }
+    }
+
+    private void ArchivesList_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var dep = e.OriginalSource as DependencyObject;
+        while (dep is not null && dep is not System.Windows.Controls.ListBoxItem)
+            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+
+        if (dep is System.Windows.Controls.ListBoxItem item)
+            item.IsSelected = true;
+    }
+
+    private void ArchiveRevealInExplorer_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedArchive is null) return;
+        var path = _vm.SelectedArchive.Path;
+        if (!File.Exists(path))
+        {
+            MessageBox.Show(this, "Файл архива не найден.", "Архивы", MessageBoxButton.OK, MessageBoxImage.Warning);
+            RefreshArchives();
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{path}\"",
+                UseShellExecute = true
+            });
+            AppLog.Default.Info("App", $"Reveal in explorer: \"{path}\"");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Reveal in explorer failed", ex);
+            MessageBox.Show(this, $"Не удалось открыть проводник:\n{ex.Message}", "Архивы",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ArchiveDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedArchive is null || _vm.IsBusy) return;
+
+        var name = _vm.SelectedArchive.Name;
+        var path = _vm.SelectedArchive.Path;
+        if (MessageBox.Show(this,
+                $"Удалить архив «{name}»?\nФайл будет удалён с диска безвозвратно.",
+                "Удаление архива", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+            AppLog.Default.Info("App", $"Archive deleted: \"{path}\"");
+            _vm.Status = $"Удалён: {name}";
+            RefreshArchives();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", $"Delete archive failed: \"{path}\"", ex);
+            MessageBox.Show(this, $"Не удалось удалить архив:\n{ex.Message}", "Удаление архива",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -525,6 +662,8 @@ public partial class MainWindow : Window
         if (_cleanedUp) return;
         _cleanedUp = true;
         AppLog.Default.Info("App", "Закрытие главного окна");
+        _inAppScheduler?.Dispose();
+        _inAppScheduler = null;
         _watcher.Dispose();
         if (_tray is not null)
         {

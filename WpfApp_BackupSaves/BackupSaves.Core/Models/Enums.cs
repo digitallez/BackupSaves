@@ -23,5 +23,7 @@ public enum ScheduleKind
 public enum RunTrigger
 {
     Manual,
-    Scheduler
+    Scheduler,
+    /// <summary>Periodic backup while the GUI app is running (Task Scheduler off).</summary>
+    InApp
 }

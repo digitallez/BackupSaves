@@ -8,6 +8,7 @@
 
 - Профили: имя, источники (файлы/папки), `BackupRoot`, retention N, расписание, формат ZIP|7z (по умолчанию 7z)
 - Ручной и headless-бэкап: `BackupSaves.exe --backup <profileId>` (exit `0` / `≠0`)
+- Task Scheduler **или** автобэкап из GUI с интервалом (пока приложение открыто / в трее)
 - `manifest.json` в архиве + atomic запись `*.tmp` → rename
 - Live-список архивов (FileSystemWatcher + polling)
 - Restore по манифесту с подтверждением перезаписи

@@ -4,6 +4,7 @@ public sealed class RunHistoryEntry
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ProfileId { get; set; }
+    public string? ProfileName { get; set; }
     public DateTimeOffset StartedUtc { get; set; }
     public DateTimeOffset? FinishedUtc { get; set; }
     public bool Success { get; set; }

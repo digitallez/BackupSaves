@@ -19,4 +19,8 @@
   <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#1A1A1A"/>
   <SolidColorBrush x:Key="TitleBarInactiveForegroundBrush" Color="#666666"/>
   <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="#E5E5E5"/>
+  <SolidColorBrush x:Key="TooltipBackgroundBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="TooltipForegroundBrush" Color="#1A1A1A"/>
+  <SolidColorBrush x:Key="{x:Static SystemColors.InfoBrushKey}" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="{x:Static SystemColors.InfoTextBrushKey}" Color="#1A1A1A"/>
 </ResourceDictionary>

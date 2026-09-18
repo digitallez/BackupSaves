@@ -49,8 +49,16 @@ public sealed class BackupRunner : IBackupRunner
 
         if (result.Success)
         {
-            _log.Info("Backup",
-                $"Успех: «{profile.Name}» files={result.FilesArchived} archive=\"{result.ArchivePath}\"");
+            if (result.Skipped)
+            {
+                _log.Info("Backup",
+                    $"Пропуск: «{profile.Name}» — {result.StatusMessage}");
+            }
+            else
+            {
+                _log.Info("Backup",
+                    $"Успех: «{profile.Name}» files={result.FilesArchived} archive=\"{result.ArchivePath}\"");
+            }
         }
         else
         {
@@ -60,10 +68,15 @@ public sealed class BackupRunner : IBackupRunner
         app.History.Insert(0, new RunHistoryEntry
         {
             ProfileId = profileId,
+            ProfileName = profile.Name,
             StartedUtc = started,
             FinishedUtc = DateTimeOffset.UtcNow,
             Success = result.Success,
-            Message = result.Success ? $"Файлов: {result.FilesArchived}" : result.ErrorMessage,
+            Message = result.Skipped
+                ? result.StatusMessage
+                : result.Success
+                    ? $"Файлов: {result.FilesArchived}"
+                    : result.ErrorMessage,
             ArchivePath = result.ArchivePath,
             Trigger = trigger
         });

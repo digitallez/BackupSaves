@@ -9,6 +9,8 @@ public sealed class BackupProfile
     /// <summary>Default for real use is SevenZip; Zip is a fallback.</summary>
     public ArchiveFormat Format { get; set; } = ArchiveFormat.SevenZip;
     public int RetentionCount { get; set; } = 10;
+    /// <summary>If true, skip creating an archive when all source file SHA-256 match the last snapshot.</summary>
+    public bool SkipUnchangedByChecksum { get; set; }
     public List<SourceEntry> Sources { get; set; } = [];
     public ScheduleConfig Schedule { get; set; } = new();
 }
