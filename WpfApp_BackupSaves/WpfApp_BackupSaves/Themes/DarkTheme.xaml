@@ -1,0 +1,22 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#1E1E1E"/>
+  <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#2D2D2D"/>
+  <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#252526"/>
+  <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E8E8E8"/>
+  <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A0A0A0"/>
+  <SolidColorBrush x:Key="BorderBrushKey" Color="#3F3F46"/>
+  <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#333337"/>
+  <SolidColorBrush x:Key="ControlForegroundBrush" Color="#E8E8E8"/>
+  <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#3C3C41"/>
+  <SolidColorBrush x:Key="ButtonHoverBrush" Color="#4A4A50"/>
+  <SolidColorBrush x:Key="SelectionBrush" Color="#264F78"/>
+  <SolidColorBrush x:Key="OkBrush" Color="#81C784"/>
+  <SolidColorBrush x:Key="FailBrush" Color="#EF5350"/>
+  <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#323233"/>
+  <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#252526"/>
+  <SolidColorBrush x:Key="TitleBarInactiveBackgroundBrush" Color="#2D2D2D"/>
+  <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#E8E8E8"/>
+  <SolidColorBrush x:Key="TitleBarInactiveForegroundBrush" Color="#A0A0A0"/>
+  <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="#3E3E42"/>
+</ResourceDictionary>

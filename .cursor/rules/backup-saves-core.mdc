@@ -1,0 +1,29 @@
+---
+description: BackupSaves — стек, слои, scope MVP и запреты для агента
+alwaysApply: true
+---
+
+# BackupSaves — core
+
+## Стек (не менять без запроса)
+- UI: **WPF** (.NET), Fluent-like ок (WPF-UI)
+- Архивы: **локальный ZIP или 7z** (не cloud/NAS)
+- Расписание: **Windows Task Scheduler** + headless CLI
+- Не предлагать WinUI/Avalonia/cloud/NAS/VSS/инкременты без явной просьбы
+
+## Слои
+- `Core`: архивация (ZIP/7z), restore, retention, модели, валидация путей
+- `Scheduler`: create/update/delete задач Task Scheduler
+- `App` (WPF): UI, tray, live-список архивов
+- UI и Scheduler **не** пишут архивы напрямую — только через Core
+
+## Режимы exe
+- `App.exe` → GUI
+- `App.exe --backup <profileId>` → headless (вызывает Scheduler)
+- Exit codes: `0` успех, `≠0` ошибка
+
+## Поведение агента
+- Уважать существующую структуру `WpfApp_BackupSaves`
+- Минимальный diff; не расширять scope молча
+- Не коммитить и не плодить markdown без просьбы (кроме правок этих правил/ТЗ по запросу)
+- Долгие операции только async; UI-поток не блокировать

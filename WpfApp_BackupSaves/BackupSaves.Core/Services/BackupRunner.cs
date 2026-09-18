@@ -1,0 +1,78 @@
+using BackupSaves.Core.Models;
+using BackupSaves.Core.Results;
+
+namespace BackupSaves.Core.Services;
+
+public interface IBackupRunner
+{
+    Task<BackupResult> RunProfileAsync(Guid profileId, RunTrigger trigger, CancellationToken ct = default);
+}
+
+/// <summary>Loads settings, runs backup, appends history. Used by UI and headless CLI.</summary>
+public sealed class BackupRunner : IBackupRunner
+{
+    private readonly ISettingsStore _settings;
+    private readonly IBackupService _backup;
+    private readonly IAppLog _log;
+
+    public BackupRunner(ISettingsStore? settings = null, IBackupService? backup = null, IAppLog? log = null)
+    {
+        _settings = settings ?? new SettingsStore();
+        _backup = backup ?? new BackupService();
+        _log = log ?? AppLog.Default;
+    }
+
+    public async Task<BackupResult> RunProfileAsync(Guid profileId, RunTrigger trigger, CancellationToken ct = default)
+    {
+        var app = await _settings.LoadAsync(ct);
+        var profile = app.Profiles.FirstOrDefault(p => p.Id == profileId);
+        if (profile is null)
+        {
+            _log.Error("Backup", $"Профиль не найден: {profileId} (trigger={trigger})");
+            return BackupResult.Fail($"Профиль не найден: {profileId}");
+        }
+
+        _log.Info("Backup",
+            $"Старт: profile=\"{profile.Name}\" id={profile.Id:N} format={profile.Format} trigger={trigger} sources={profile.Sources.Count}");
+
+        var started = DateTimeOffset.UtcNow;
+        BackupResult result;
+        try
+        {
+            result = await _backup.BackupAsync(profile, ct);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Backup", $"Исключение при бэкапе «{profile.Name}»", ex);
+            result = BackupResult.Fail(ex.Message);
+        }
+
+        if (result.Success)
+        {
+            _log.Info("Backup",
+                $"Успех: «{profile.Name}» files={result.FilesArchived} archive=\"{result.ArchivePath}\"");
+        }
+        else
+        {
+            _log.Error("Backup", $"Ошибка: «{profile.Name}» — {result.ErrorMessage}");
+        }
+
+        app.History.Insert(0, new RunHistoryEntry
+        {
+            ProfileId = profileId,
+            StartedUtc = started,
+            FinishedUtc = DateTimeOffset.UtcNow,
+            Success = result.Success,
+            Message = result.Success ? $"Файлов: {result.FilesArchived}" : result.ErrorMessage,
+            ArchivePath = result.ArchivePath,
+            Trigger = trigger
+        });
+
+        if (app.History.Count > 200)
+            app.History = app.History.Take(200).ToList();
+
+        await _settings.SaveAsync(app, ct);
+        _log.Info("Settings", "История запусков обновлена после бэкапа");
+        return result;
+    }
+}

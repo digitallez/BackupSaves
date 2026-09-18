@@ -1,0 +1,33 @@
+---
+description: BackupSaves — Task Scheduler, live UI архивов, tray, этапы MVP
+alwaysApply: true
+---
+
+# BackupSaves — scheduler & UI
+
+## Task Scheduler
+- Задача на профиль: `App.exe --backup <profileId>`
+- Сохранение профиля синхронизирует задачу (без тихого drift)
+- Удаление профиля → удалить задачу
+- Имена задач стабильные, привязка к profileId/slug
+
+## Live UI (когда приложение открыто)
+- Архивы от Scheduler появляются **без F5**
+- `FileSystemWatcher` на `BackupRoot/<slug>/` (`*.zip`, `*.7z`) + debounce 300–500 ms
+- Polling fallback 5–10 с (FSW ненадёжен на части дисков)
+- События → Dispatcher (UI-thread)
+- При старте UI — полная перечитка папки, затем live
+
+## UI
+- MVVM; секции: Профили, Архивы/История, Настройки
+- Трей: hide to tray; Exit — явно
+- One-click restore — обязательная фича MVP
+
+## Этапы (порядок работ)
+0 Каркас слоёв + settings.json  
+1 ZIP/7z+manifest + CLI `--backup`  
+2 CRUD профилей + ручной бэкап  
+3 One-click restore  
+4 Task Scheduler  
+5 Live FSW+polling + tray  
+6 Полировка (excludes, locked files UX)

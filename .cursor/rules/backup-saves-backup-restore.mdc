@@ -1,0 +1,27 @@
+---
+description: BackupSaves — ZIP/7z, manifest, backup atomicity, one-click restore
+alwaysApply: true
+---
+
+# BackupSaves — backup & restore
+
+## Формат + manifest (обязательно)
+- Формат профиля: **ZIP или 7z** (локально)
+- В корне архива: `manifest.json` (`profileId`, `createdUtc`, `format`, entries: `sourcePath`, `archivePath`, `type`)
+- Данные под префиксом `data/...`
+- Restore **только** по манифесту; без манифеста — ошибка, не угадывать
+- В манифесте желательно хранить шаблон пути (`%APPDATA%`…) и expanded path
+
+## Backup
+- Писать `*.tmp` → atomic `Move` в финальное имя (`.zip` / `.7z`)
+- Имя: `<slug>_yyyy-MM-dd_HH-mm-ss.zip` или `.7z`
+- Retention N — только после успешного rename
+- Не бэкапить свою BackupRoot внутрь себя
+- Locked files (MVP): retry 2–3 раза, затем fail + понятный лог
+- Path traversal в архиве запрещён
+
+## Restore «в один клик»
+- Восстановить **все** пути профиля из выбранного архива в исходные локации
+- Confirm перед overwrite обязателен
+- Best-effort + отчёт частичных ошибок предпочтительнее silent abort всего job
+- Переменные: `%USERPROFILE%`, `%APPDATA%`, `%LOCALAPPDATA%`, `%DOCUMENTS%`
