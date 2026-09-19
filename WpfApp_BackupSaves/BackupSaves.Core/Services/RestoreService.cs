@@ -33,19 +33,19 @@ public sealed class RestoreService : IRestoreService
 
     public async Task<RestoreResult> RestoreAsync(string archivePath, bool overwrite, CancellationToken ct = default)
     {
-        AppLog.Default.Info("Restore", $"Старт: archive=\"{archivePath}\" overwrite={overwrite}");
+        AppLog.Default.Info("Restore", $"Start: archive=\"{archivePath}\" overwrite={overwrite}");
 
         var manifest = await ReadManifestAsync(archivePath, ct);
         if (manifest is null)
         {
-            AppLog.Default.Error("Restore", "Нет manifest.json");
-            return RestoreResult.Fail("В архиве нет manifest.json — восстановление невозможно.");
+            AppLog.Default.Error("Restore", "No manifest.json");
+            return RestoreResult.Fail(LocalizationService.Text("core.restoreNoManifest"));
         }
 
         if (manifest.Entries.Count == 0)
         {
-            AppLog.Default.Error("Restore", "Манифест пуст");
-            return RestoreResult.Fail("Манифест пуст.");
+            AppLog.Default.Error("Restore", "Empty manifest");
+            return RestoreResult.Fail(LocalizationService.Text("core.restoreEmptyManifest"));
         }
 
         var errors = new List<RestoreFileError>();
@@ -70,7 +70,7 @@ public sealed class RestoreService : IRestoreService
                         errors.Add(new RestoreFileError
                         {
                             SourcePath = item.SourcePath,
-                            Message = $"Небезопасный archivePath: {item.ArchivePath}"
+                            Message = LocalizationService.Text("core.restoreUnsafePath", item.ArchivePath)
                         });
                         continue;
                     }
@@ -81,7 +81,7 @@ public sealed class RestoreService : IRestoreService
                         errors.Add(new RestoreFileError
                         {
                             SourcePath = item.SourcePath,
-                            Message = "Файл отсутствует в архиве"
+                            Message = LocalizationService.Text("core.restoreMissingInArchive")
                         });
                         continue;
                     }
@@ -101,7 +101,7 @@ public sealed class RestoreService : IRestoreService
                             errors.Add(new RestoreFileError
                             {
                                 SourcePath = target,
-                                Message = "Файл существует (overwrite=false)"
+                                Message = LocalizationService.Text("core.restoreExistsNoOverwrite")
                             });
                             continue;
                         }
@@ -129,12 +129,12 @@ public sealed class RestoreService : IRestoreService
         }
         catch (OperationCanceledException)
         {
-            AppLog.Default.Warn("Restore", "Отменено");
+            AppLog.Default.Warn("Restore", "Cancelled");
             throw;
         }
         catch (Exception ex)
         {
-            AppLog.Default.Error("Restore", "Сбой restore", ex);
+            AppLog.Default.Error("Restore", "Restore failed", ex);
             return RestoreResult.Fail(ex.Message);
         }
 
@@ -143,13 +143,15 @@ public sealed class RestoreService : IRestoreService
             Success = errors.Count == 0,
             RestoredCount = restored,
             Errors = errors,
-            ErrorMessage = errors.Count == 0 ? null : $"Восстановлено {restored}, ошибок {errors.Count}"
+            ErrorMessage = errors.Count == 0
+                ? null
+                : LocalizationService.Text("core.restorePartial", restored, errors.Count)
         };
 
         if (result.Success)
-            AppLog.Default.Info("Restore", $"Успех: restored={restored}");
+            AppLog.Default.Info("Restore", $"OK: restored={restored}");
         else
-            AppLog.Default.Warn("Restore", $"Частично/ошибка: restored={restored}, errors={errors.Count}");
+            AppLog.Default.Warn("Restore", $"Partial/error: restored={restored}, errors={errors.Count}");
 
         return result;
     }

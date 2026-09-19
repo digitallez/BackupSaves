@@ -61,10 +61,10 @@ public sealed class BackupService : IBackupService
         try
         {
             if (profile.Sources.Count == 0)
-                return Fail("У профиля нет источников.");
+                return Fail(LocalizationService.Text("core.noSources"));
 
             if (string.IsNullOrWhiteSpace(profile.BackupRoot))
-                return Fail("Не указан BackupRoot.");
+                return Fail(LocalizationService.Text("core.noBackupRoot"));
 
             if (string.IsNullOrWhiteSpace(profile.Slug))
                 profile.Slug = PathHelper.ToSlug(profile.Name);
@@ -78,7 +78,7 @@ public sealed class BackupService : IBackupService
             var finalPath = Path.Combine(archiveDir, fileName);
             var tempPath = finalPath + ".tmp";
 
-            AppLog.Default.Info("Backup", $"Архивация → temp=\"{tempPath}\" format={profile.Format}");
+            AppLog.Default.Info("Backup", $"Archiving → temp=\"{tempPath}\" format={profile.Format}");
 
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
@@ -93,16 +93,16 @@ public sealed class BackupService : IBackupService
                 var expanded = PathHelper.ExpandPath(template);
 
                 if (PathHelper.IsUnderDirectory(expanded, backupRoot) || PathHelper.IsUnderDirectory(expanded, archiveDir))
-                    return Fail($"Источник пересекается с BackupRoot: {template}");
+                    return Fail(LocalizationService.Text("core.sourceOverlapsRoot", template));
 
                 if (source.Type == SourceType.File)
                 {
                     if (!File.Exists(expanded))
-                        return Fail($"Файл не найден: {expanded}");
+                        return Fail(LocalizationService.Text("core.fileNotFound", expanded));
 
                     var archivePath = PathHelper.ToArchiveRelativeFile(expanded);
                     if (!PathHelper.IsSafeArchivePath(archivePath))
-                        return Fail($"Некорректный путь в архиве: {archivePath}");
+                        return Fail(LocalizationService.Text("core.badArchivePath", archivePath));
 
                     files.Add((archivePath, expanded, template, expanded));
                     manifestEntries.Add(new ManifestEntry
@@ -116,7 +116,7 @@ public sealed class BackupService : IBackupService
                 else
                 {
                     if (!Directory.Exists(expanded))
-                        return Fail($"Папка не найдена: {expanded}");
+                        return Fail(LocalizationService.Text("core.folderNotFound", expanded));
 
                     foreach (var file in Directory.EnumerateFiles(expanded, "*", SearchOption.AllDirectories))
                     {
@@ -126,7 +126,7 @@ public sealed class BackupService : IBackupService
 
                         var archivePath = PathHelper.ToArchiveRelativePath(expanded, file);
                         if (!PathHelper.IsSafeArchivePath(archivePath))
-                            return Fail($"Некорректный путь в архиве: {archivePath}");
+                            return Fail(LocalizationService.Text("core.badArchivePath", archivePath));
 
                         files.Add((archivePath, file, template, expanded));
                         manifestEntries.Add(new ManifestEntry
@@ -141,12 +141,12 @@ public sealed class BackupService : IBackupService
             }
 
             if (files.Count == 0)
-                return Fail("Нет файлов для бэкапа.");
+                return Fail(LocalizationService.Text("core.noFiles"));
 
             List<FileChecksumEntry>? checksums = null;
             if (profile.SkipUnchangedByChecksum)
             {
-                AppLog.Default.Info("Backup", $"Checksum: считаем SHA-256 для {files.Count} файл(ов)…");
+                AppLog.Default.Info("Backup", $"Checksum: computing SHA-256 for {files.Count} file(s)…");
                 try
                 {
                     checksums = await ChecksumService.ComputeAsync(
@@ -154,19 +154,19 @@ public sealed class BackupService : IBackupService
                 }
                 catch (IOException ex)
                 {
-                    AppLog.Default.Error("Backup", "IO при подсчёте checksum", ex);
-                    return BackupResult.Fail($"Не удалось прочитать файл для checksum: {ex.Message}");
+                    AppLog.Default.Error("Backup", "IO while computing checksum", ex);
+                    return BackupResult.Fail(LocalizationService.Text("core.checksumReadFailed", ex.Message));
                 }
 
                 var previous = ChecksumService.TryLoad(archiveDir);
                 if (previous is not null && ChecksumService.AreEqual(checksums, previous.Files))
                 {
                     AppLog.Default.Info("Backup",
-                        $"Checksum: изменений нет ({checksums.Count} файл(ов)) — архив не создаём");
+                        $"Checksum: no changes ({checksums.Count} file(s)) — skip archive");
                     return BackupResult.SkippedUnchanged(checksums.Count);
                 }
 
-                AppLog.Default.Info("Backup", "Checksum: есть изменения — создаём архив");
+                AppLog.Default.Info("Backup", "Checksum: changes detected — creating archive");
             }
 
             var manifest = new Manifest
@@ -183,7 +183,7 @@ public sealed class BackupService : IBackupService
             var writer = ArchiveWriterFactory.Create(profile.Format);
             var writeList = files.Select(f => (f.ArchivePath, f.SourceFilePath)).ToList();
 
-            AppLog.Default.Info("Backup", $"Запись архива: {files.Count} файл(ов), manifest entries={manifestEntries.Count}");
+            AppLog.Default.Info("Backup", $"Writing archive: {files.Count} file(s), manifest entries={manifestEntries.Count}");
 
             try
             {
@@ -192,14 +192,14 @@ public sealed class BackupService : IBackupService
             catch (IOException ex)
             {
                 TryDelete(tempPath);
-                AppLog.Default.Error("Backup", "IO при записи архива", ex);
+                AppLog.Default.Error("Backup", "IO while writing archive", ex);
                 return BackupResult.Fail(ex.Message);
             }
             catch (Exception ex)
             {
                 TryDelete(tempPath);
-                AppLog.Default.Error("Backup", "Ошибка архивации", ex);
-                return BackupResult.Fail($"Ошибка архивации: {ex.Message}");
+                AppLog.Default.Error("Backup", "Archive write failed", ex);
+                return BackupResult.Fail(LocalizationService.Text("core.archiveError", ex.Message));
             }
 
             File.Move(tempPath, finalPath, overwrite: false);
@@ -215,23 +215,23 @@ public sealed class BackupService : IBackupService
                 }
                 catch (Exception ex)
                 {
-                    AppLog.Default.Warn("Backup", $"Не удалось сохранить checksum snapshot: {ex.Message}");
+                    AppLog.Default.Warn("Backup", $"Failed to save checksum snapshot: {ex.Message}");
                 }
             }
 
             AppLog.Default.Info("Backup",
-                $"Архив готов: \"{finalPath}\" (atomic rename), retention deleted={deleted}");
+                $"Archive ready: \"{finalPath}\" (atomic rename), retention deleted={deleted}");
 
             return BackupResult.Ok(finalPath, files.Count);
         }
         catch (OperationCanceledException)
         {
-            AppLog.Default.Warn("Backup", "Бэкап отменён");
+            AppLog.Default.Warn("Backup", "Backup cancelled");
             throw;
         }
         catch (Exception ex)
         {
-            AppLog.Default.Error("Backup", "Необработанная ошибка бэкапа", ex);
+            AppLog.Default.Error("Backup", "Unhandled backup error", ex);
             return BackupResult.Fail(ex.Message);
         }
     }

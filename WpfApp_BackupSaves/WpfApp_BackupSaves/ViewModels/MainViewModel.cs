@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using BackupSaves.Core.Models;
-using WpfApp_BackupSaves.Services;
+using BackupSaves.Core.Services;
 
 namespace WpfApp_BackupSaves.ViewModels;
 
@@ -56,14 +56,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public MainViewModel()
     {
         ReloadLanguages();
-        _status = LocalizationService.Text("main.statusReady");
+        SetReadyStatus();
         SelectLanguageSilent(LocalizationService.Instance.Language);
         LocalizationService.Instance.LanguageChanged += (_, _) =>
         {
-            if (_status == LocalizationService.Text("main.statusReady") ||
-                string.IsNullOrEmpty(_status) ||
-                _status is "Готово" or "Ready")
-                Status = LocalizationService.Text("main.statusReady");
+            if (_statusIsReady || string.IsNullOrEmpty(_status))
+                SetReadyStatus();
         };
     }
 
@@ -132,10 +130,23 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     private string _status = "";
+    private bool _statusIsReady;
+
     public string Status
     {
         get => _status;
-        set => Set(ref _status, value);
+        set
+        {
+            if (Set(ref _status, value))
+                _statusIsReady = false;
+        }
+    }
+
+    public void SetReadyStatus()
+    {
+        _status = LocalizationService.Text("main.statusReady");
+        _statusIsReady = true;
+        OnPropertyChanged(nameof(Status));
     }
 
     private bool _isBusy;

@@ -81,8 +81,8 @@ public sealed class InAppBackupScheduler : IDisposable
                 AppLog.Default.Info("InAppSchedule",
                     $"Due: «{profile.Name}» interval={mins}m farewell={farewell} last={profile.Schedule.LastInAppBackupUtc:o}");
                 _setStatus(farewell
-                    ? $"Бэкап после выхода «{profile.Name}»…"
-                    : $"Автобэкап «{profile.Name}»…");
+                    ? LocalizationService.Text("status.farewellBackup", profile.Name)
+                    : LocalizationService.Text("status.autoBackupRunning", profile.Name));
 
                 try
                 {
@@ -120,7 +120,7 @@ public sealed class InAppBackupScheduler : IDisposable
                 profile.WatchProcessWasRunning = true;
                 changed = true;
                 AppLog.Default.Info("InAppSchedule",
-                    $"Процесс «{profile.WatchProcessPattern}» запущен (профиль «{profile.Name}»)");
+                    $"Process «{profile.WatchProcessPattern}» started (profile «{profile.Name}»)");
             }
         }
 

@@ -25,15 +25,17 @@ public sealed class BackupRunner : IBackupRunner
     public async Task<BackupResult> RunProfileAsync(Guid profileId, RunTrigger trigger, CancellationToken ct = default)
     {
         var app = await _settings.LoadAsync(ct);
+        EnsureLanguage(app);
+
         var profile = app.Profiles.FirstOrDefault(p => p.Id == profileId);
         if (profile is null)
         {
-            _log.Error("Backup", $"Профиль не найден: {profileId} (trigger={trigger})");
-            return BackupResult.Fail($"Профиль не найден: {profileId}");
+            _log.Error("Backup", $"Profile not found: {profileId} (trigger={trigger})");
+            return BackupResult.Fail(LocalizationService.Text("core.profileNotFound", profileId));
         }
 
         _log.Info("Backup",
-            $"Старт: profile=\"{profile.Name}\" id={profile.Id:N} format={profile.Format} trigger={trigger} sources={profile.Sources.Count}");
+            $"Start: profile=\"{profile.Name}\" id={profile.Id:N} format={profile.Format} trigger={trigger} sources={profile.Sources.Count}");
 
         var started = DateTimeOffset.UtcNow;
         BackupResult result;
@@ -43,13 +45,13 @@ public sealed class BackupRunner : IBackupRunner
             if (ShouldSkipForProcessWatch(profile, out var skipMessage, out var farewell))
             {
                 _log.Info("Backup",
-                    $"Пропуск по процессу «{profile.Name}»: {skipMessage}");
+                    $"Skip by process watch «{profile.Name}»: {skipMessage}");
                 result = BackupResult.SkippedReason(skipMessage!);
             }
             else
             {
                 if (farewell)
-                    _log.Info("Backup", $"Прощальный бэкап «{profile.Name}»: процесс только что завершился");
+                    _log.Info("Backup", $"Farewell backup «{profile.Name}»: process just exited");
 
                 result = await _backup.BackupAsync(profile, ct);
             }
@@ -62,7 +64,7 @@ public sealed class BackupRunner : IBackupRunner
         }
         catch (Exception ex)
         {
-            _log.Error("Backup", $"Исключение при бэкапе «{profile.Name}»", ex);
+            _log.Error("Backup", $"Exception during backup «{profile.Name}»", ex);
             result = BackupResult.Fail(ex.Message);
         }
 
@@ -71,17 +73,17 @@ public sealed class BackupRunner : IBackupRunner
             if (result.Skipped)
             {
                 _log.Info("Backup",
-                    $"Пропуск: «{profile.Name}» — {result.StatusMessage}");
+                    $"Skipped: «{profile.Name}» — {result.StatusMessage}");
             }
             else
             {
                 _log.Info("Backup",
-                    $"Успех: «{profile.Name}» files={result.FilesArchived} archive=\"{result.ArchivePath}\"");
+                    $"OK: «{profile.Name}» files={result.FilesArchived} archive=\"{result.ArchivePath}\"");
             }
         }
         else
         {
-            _log.Error("Backup", $"Ошибка: «{profile.Name}» — {result.ErrorMessage}");
+            _log.Error("Backup", $"Failed: «{profile.Name}» — {result.ErrorMessage}");
         }
 
         app.History.Insert(0, new RunHistoryEntry
@@ -94,7 +96,7 @@ public sealed class BackupRunner : IBackupRunner
             Message = result.Skipped
                 ? result.StatusMessage
                 : result.Success
-                    ? $"Файлов: {result.FilesArchived} • есть изменения • архив создан"
+                    ? LocalizationService.Text("core.archiveCreated", result.FilesArchived)
                     : result.ErrorMessage,
             ArchivePath = result.ArchivePath,
             Trigger = trigger
@@ -104,8 +106,16 @@ public sealed class BackupRunner : IBackupRunner
             app.History = app.History.Take(200).ToList();
 
         await _settings.SaveAsync(app, ct);
-        _log.Info("Settings", "История запусков обновлена после бэкапа");
+        _log.Info("Settings", "Run history updated after backup");
         return result;
+    }
+
+    private static void EnsureLanguage(AppSettings app)
+    {
+        if (!string.IsNullOrEmpty(LocalizationService.Instance.Language))
+            return;
+        var id = LocalizationService.Instance.ResolveInitialLanguage(app.Ui.Language);
+        LocalizationService.Instance.SetLanguage(id);
     }
 
     /// <summary>
@@ -130,7 +140,7 @@ public sealed class BackupRunner : IBackupRunner
             return false;
         }
 
-        message = $"Процесс «{profile.WatchProcessPattern}» не запущен — бэкап пропущен";
+        message = LocalizationService.Text("core.processNotRunning", profile.WatchProcessPattern);
         return true;
     }
 }

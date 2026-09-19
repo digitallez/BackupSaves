@@ -3,7 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 
-namespace WpfApp_BackupSaves.Services;
+namespace BackupSaves.Core.Services;
 
 /// <summary>
 /// One locale = one JSON in Locales/. Filename is arbitrary.

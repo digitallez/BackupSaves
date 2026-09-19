@@ -77,9 +77,9 @@ public static class UpdateInstaller
     public static void ApplyAndExit(string zipPath, bool restart)
     {
         var exePath = Environment.ProcessPath
-            ?? throw new InvalidOperationException("Не удалось определить путь к BackupSaves.exe");
+            ?? throw new InvalidOperationException(LocalizationService.Text("update.errExePath"));
         var targetDir = Path.GetDirectoryName(exePath)
-            ?? throw new InvalidOperationException("Не удалось определить папку установки");
+            ?? throw new InvalidOperationException(LocalizationService.Text("update.errInstallDir"));
 
         // Ensure log folder exists before helper starts (helper also creates it).
         _ = LogsDirectory;
@@ -108,7 +108,7 @@ public static class UpdateInstaller
         AppLog.Default.Info("Update",
             $"Launching updater helper (restart={restart}, target=\"{targetDir}\")");
         var proc = Process.Start(psi)
-            ?? throw new InvalidOperationException("Не удалось запустить helper обновления (cmd/powershell).");
+            ?? throw new InvalidOperationException(LocalizationService.Text("update.errHelper"));
         AppLog.Default.Info("Update", $"Updater launcher started pid={proc.Id}");
     }
 

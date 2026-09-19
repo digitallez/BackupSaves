@@ -1,3 +1,5 @@
+using BackupSaves.Core.Services;
+
 namespace BackupSaves.Core.Results;
 
 public sealed class BackupResult
@@ -21,7 +23,7 @@ public sealed class BackupResult
         Success = true,
         Skipped = true,
         FilesArchived = 0,
-        StatusMessage = $"Файлов: {fileCount} • Изменений нет • архив не создан"
+        StatusMessage = LocalizationService.Text("core.skipUnchanged", fileCount)
     };
 
     public static BackupResult SkippedReason(string message) => new()

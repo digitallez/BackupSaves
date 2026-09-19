@@ -12,8 +12,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <PlatformTarget>x64</PlatformTarget>
-    <!-- Keep only Russian satellite resources (TaskScheduler etc.); drop de/es/fr/... -->
-    <SatelliteResourceLanguages>ru</SatelliteResourceLanguages>
+    <!-- No NuGet satellite folders (TaskScheduler etc.); invariant strings stay in the main DLL -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
 
     <Version>$(VersionMajor).$(VersionMinor).$(VersionPatch)</Version>
     <AssemblyVersion>$(VersionMajor).$(VersionMinor).$(VersionPatch).0</AssemblyVersion>

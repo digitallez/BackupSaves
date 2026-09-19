@@ -71,7 +71,7 @@ public static class ChecksumService
         }
         catch (Exception ex)
         {
-            AppLog.Default.Warn("Checksum", $"Не удалось прочитать {path}: {ex.Message}");
+            AppLog.Default.Warn("Checksum", $"Failed to read {path}: {ex.Message}");
             return null;
         }
     }

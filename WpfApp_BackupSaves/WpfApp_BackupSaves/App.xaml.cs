@@ -32,11 +32,11 @@ public partial class App : System.Windows.Application
             ThemeManager.Apply(settings.Ui.Theme);
             var lang = LocalizationService.Instance.ResolveInitialLanguage(settings.Ui.Language);
             LocalizationService.Instance.SetLanguage(lang);
-            AppLog.Default.Info("App", $"Тема из настроек: {settings.Ui.Theme}; язык={LocalizationService.Instance.Language}");
+            AppLog.Default.Info("App", $"Theme from settings: {settings.Ui.Theme}; lang={LocalizationService.Instance.Language}");
         }
         catch (Exception ex)
         {
-            AppLog.Default.Error("App", "Не удалось загрузить тему, fallback Dark", ex);
+            AppLog.Default.Error("App", "Failed to load theme, fallback Dark", ex);
             ThemeManager.Apply(AppTheme.Dark);
             var lang = LocalizationService.Instance.ResolveInitialLanguage(null);
             LocalizationService.Instance.SetLanguage(lang);

@@ -54,7 +54,7 @@ public sealed class SettingsStore : ISettingsStore
         File.WriteAllText(tmp, json);
         File.Move(tmp, SettingsPath, overwrite: true);
         AppLog.Default.Info("Settings",
-            $"Сохранено settings.json (profiles={settings.Profiles.Count}, history={settings.History.Count}, theme={settings.Ui.Theme})");
+            $"Saved settings.json (profiles={settings.Profiles.Count}, history={settings.History.Count}, theme={settings.Ui.Theme})");
     }
 
     public async Task<AppSettings> LoadAsync(CancellationToken ct = default)
@@ -81,6 +81,6 @@ public sealed class SettingsStore : ISettingsStore
 
         File.Move(tmp, SettingsPath, overwrite: true);
         AppLog.Default.Info("Settings",
-            $"Сохранено settings.json (profiles={settings.Profiles.Count}, history={settings.History.Count}, theme={settings.Ui.Theme})");
+            $"Saved settings.json (profiles={settings.Profiles.Count}, history={settings.History.Count}, theme={settings.Ui.Theme})");
     }
 }

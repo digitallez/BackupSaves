@@ -81,7 +81,7 @@ public partial class MainWindow : Window
         menu.Items.Add(LocalizationService.Text("tray.open"), null, (_, _) => RestoreFromTray());
         menu.Items.Add(LocalizationService.Text("tray.exit"), null, (_, _) =>
         {
-            AppLog.Default.Info("App", "Выход из трея");
+            AppLog.Default.Info("App", "Exit from tray");
             _reallyClose = true;
             Close();
         });
@@ -266,7 +266,7 @@ public partial class MainWindow : Window
         var next = ThemeManager.Toggle();
         _app.Ui.Theme = next;
         UpdateThemeToggleCaption();
-        AppLog.Default.Info("Settings", $"Смена темы → {next}");
+        AppLog.Default.Info("Settings", $"Theme → {next}");
         await _settings.SaveAsync(_app);
         _vm.Status = next == AppTheme.Dark
             ? LocalizationService.Text("status.themeDark")
@@ -324,7 +324,7 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(h.ProfileName))
             {
                 h.ProfileName = _app.Profiles.FirstOrDefault(p => p.Id == h.ProfileId)?.Name
-                               ?? "Профиль удалён";
+                               ?? LocalizationService.Text("history.profileDeleted");
             }
 
             _vm.History.Add(h);
@@ -455,7 +455,7 @@ public partial class MainWindow : Window
 
         _app.Profiles.Add(dlg.Profile);
         AppLog.Default.Info("Settings",
-            $"Профиль создан: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} root=\"{dlg.Profile.BackupRoot}\"");
+            $"Profile created: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} root=\"{dlg.Profile.BackupRoot}\"");
         await PersistAndSyncSchedulerAsync(dlg.Profile);
         EnsureInAppScheduler();
         _inAppScheduler!.Start();
@@ -475,7 +475,7 @@ public partial class MainWindow : Window
         if (idx < 0) return;
         _app.Profiles[idx] = dlg.Profile;
         AppLog.Default.Info("Settings",
-            $"Профиль изменён: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} schedule={dlg.Profile.Schedule.Enabled}/{dlg.Profile.Schedule.Kind} inApp={dlg.Profile.Schedule.InAppEnabled}");
+            $"Profile updated: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} schedule={dlg.Profile.Schedule.Enabled}/{dlg.Profile.Schedule.Kind} inApp={dlg.Profile.Schedule.InAppEnabled}");
         await PersistAndSyncSchedulerAsync(dlg.Profile);
         EnsureInAppScheduler();
         _inAppScheduler!.Start();
@@ -494,7 +494,7 @@ public partial class MainWindow : Window
             return;
 
         try { _scheduler.Delete(p); } catch { /* ignore */ }
-        AppLog.Default.Info("Settings", $"Профиль удалён: «{p.Name}» id={p.Id:N}");
+        AppLog.Default.Info("Settings", $"Profile deleted: «{p.Name}» id={p.Id:N}");
         _app.Profiles.RemoveAll(x => x.Id == p.Id);
         await _settings.SaveAsync(_app);
         ReloadProfilesUi();
@@ -543,7 +543,7 @@ public partial class MainWindow : Window
             LocalizationService.Text("msg.restoreTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes)
         {
-            AppLog.Default.Info("Restore", "Пользователь отменил confirm");
+            AppLog.Default.Info("Restore", "User cancelled confirm");
             return;
         }
 
@@ -671,7 +671,7 @@ public partial class MainWindow : Window
 
     private void ForceExit_Click(object sender, RoutedEventArgs e)
     {
-        AppLog.Default.Info("App", "Выход без подтверждения (кнопка История)");
+        AppLog.Default.Info("App", "Force exit (History button)");
         _reallyClose = true;
         Close();
     }
@@ -693,19 +693,19 @@ public partial class MainWindow : Window
         switch (dlg.Choice)
         {
             case CloseChoice.HideToTray:
-                AppLog.Default.Info("App", "Пользователь скрыл приложение в трей");
+                AppLog.Default.Info("App", "User hid app to tray");
                 Hide();
                 _tray?.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.running"), WinForms.ToolTipIcon.Info);
                 break;
             case CloseChoice.Exit:
-                AppLog.Default.Info("App", "Пользователь подтвердил выход");
+                AppLog.Default.Info("App", "User confirmed exit");
                 _reallyClose = true;
                 e.Cancel = false;
                 CleanupOnExit();
                 TryApplyPendingUpdateOnExit();
                 break;
             default:
-                AppLog.Default.Info("App", "Закрытие отменено");
+                AppLog.Default.Info("App", "Close cancelled");
                 break;
         }
     }
@@ -714,7 +714,7 @@ public partial class MainWindow : Window
     {
         if (_cleanedUp) return;
         _cleanedUp = true;
-        AppLog.Default.Info("App", "Закрытие главного окна");
+        AppLog.Default.Info("App", "Main window closing");
         _inAppScheduler?.Dispose();
         _inAppScheduler = null;
         _watcher.Dispose();

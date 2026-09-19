@@ -64,7 +64,7 @@ public sealed class ZipArchiveWriter : IArchiveWriter
             }
         }
 
-        throw new IOException($"Файл занят или недоступен: {path}", last);
+        throw new IOException(LocalizationService.Text("core.fileBusy", path), last);
     }
 }
 
