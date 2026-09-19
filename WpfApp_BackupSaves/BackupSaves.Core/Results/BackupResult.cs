@@ -21,7 +21,15 @@ public sealed class BackupResult
         Success = true,
         Skipped = true,
         FilesArchived = 0,
-        StatusMessage = $"Изменений нет ({fileCount} файл(ов)) — архив не создан"
+        StatusMessage = $"Файлов: {fileCount} • Изменений нет • архив не создан"
+    };
+
+    public static BackupResult SkippedReason(string message) => new()
+    {
+        Success = true,
+        Skipped = true,
+        FilesArchived = 0,
+        StatusMessage = message
     };
 
     public static BackupResult Fail(string message) => new()

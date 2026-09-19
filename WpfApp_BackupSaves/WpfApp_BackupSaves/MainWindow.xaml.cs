@@ -37,7 +37,29 @@ public partial class MainWindow : Window
         DataContext = _vm;
         _watcher = new ArchiveFolderWatcher(() => Dispatcher.Invoke(RefreshArchives));
         InitTray();
+        _vm.LanguageChanged += OnUiLanguageChanged;
+        LocalizationService.Instance.LanguageChanged += (_, _) =>
+        {
+            Dispatcher.Invoke(() =>
+            {
+                RebuildTrayMenu();
+                UpdateThemeToggleCaption();
+            });
+        };
         Loaded += async (_, _) => await LoadAsync();
+    }
+
+    private async void OnUiLanguageChanged(object? sender, string culture)
+    {
+        _app.Ui.Language = culture;
+        try
+        {
+            await _settings.SaveAsync(_app);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Settings", "Failed to save language", ex);
+        }
     }
 
     private void InitTray()
@@ -49,9 +71,15 @@ public partial class MainWindow : Window
             Icon = LoadAppIcon() ?? System.Drawing.SystemIcons.Application
         };
         _tray.DoubleClick += (_, _) => RestoreFromTray();
+        RebuildTrayMenu();
+    }
+
+    private void RebuildTrayMenu()
+    {
+        if (_tray is null) return;
         var menu = new WinForms.ContextMenuStrip();
-        menu.Items.Add("Открыть", null, (_, _) => RestoreFromTray());
-        menu.Items.Add("Выход", null, (_, _) =>
+        menu.Items.Add(LocalizationService.Text("tray.open"), null, (_, _) => RestoreFromTray());
+        menu.Items.Add(LocalizationService.Text("tray.exit"), null, (_, _) =>
         {
             AppLog.Default.Info("App", "Выход из трея");
             _reallyClose = true;
@@ -88,13 +116,18 @@ public partial class MainWindow : Window
     {
         _app = await _settings.LoadAsync();
         ThemeManager.Apply(_app.Ui.Theme);
+        var lang = LocalizationService.Instance.ResolveInitialLanguage(_app.Ui.Language);
+        LocalizationService.Instance.SetLanguage(lang);
+        _vm.ReloadLanguages();
+        _vm.SelectLanguageSilent(LocalizationService.Instance.Language);
         UpdateThemeToggleCaption();
+        RebuildTrayMenu();
         ReloadProfilesUi();
         ReloadHistoryUi();
         _watcher.Watch(_app.Profiles);
-        _vm.Status = $"Логи: {AppLog.Default.LogDirectory}";
+        _vm.Status = LocalizationService.Text("status.logs", AppLog.Default.LogDirectory);
         AppLog.Default.Info("App",
-            $"MainWindow loaded; v={AppVersion.Current}; profiles={_app.Profiles.Count}; logDir={AppLog.Default.LogDirectory}");
+            $"MainWindow loaded; v={AppVersion.Current}; profiles={_app.Profiles.Count}; logDir={AppLog.Default.LogDirectory}; lang={LocalizationService.Instance.Language}");
 
         EnsureInAppScheduler();
         _inAppScheduler!.Start();
@@ -125,7 +158,7 @@ public partial class MainWindow : Window
                 && !string.IsNullOrWhiteSpace(_app.Ui.PendingUpdateZipPath)
                 && File.Exists(_app.Ui.PendingUpdateZipPath))
             {
-                _vm.Status = $"Обновление {release.Version} будет установлено при выходе";
+                _vm.Status = LocalizationService.Text("update.statusWillInstall", release.Version);
                 return;
             }
 
@@ -154,7 +187,7 @@ public partial class MainWindow : Window
                     _app.Ui.PendingUpdateZipPath = null;
                     await _settings.SaveAsync(_app);
                     AppLog.Default.Info("Update", $"User skipped version {release.Version}");
-                    _vm.Status = $"Версия {release.Version} пропущена";
+                    _vm.Status = LocalizationService.Text("update.statusSkipped", release.Version);
                     break;
                 default:
                     AppLog.Default.Info("Update", "User postponed update prompt");
@@ -164,18 +197,18 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLog.Default.Error("Update", "Update check failed", ex);
-            _vm.Status = "Проверка обновлений не удалась";
+            _vm.Status = LocalizationService.Text("update.statusCheckFailed");
         }
     }
 
     private async Task DownloadAndApplyNowAsync(ReleaseInfo release)
     {
         _vm.IsBusy = true;
-        _vm.Status = $"Скачивание {release.Version}…";
+        _vm.Status = LocalizationService.Text("update.statusDownloading", release.Version);
         try
         {
             var progress = new Progress<double>(p =>
-                _vm.Status = $"Скачивание {release.Version}… {(int)(p * 100)}%");
+                _vm.Status = LocalizationService.Text("update.statusDownloadingPct", release.Version, (int)(p * 100)));
             var zip = await UpdateInstaller.DownloadAsync(release, progress);
             _app.Ui.PendingUpdateVersion = null;
             _app.Ui.PendingUpdateZipPath = null;
@@ -190,7 +223,8 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLog.Default.Error("Update", "Update now failed", ex);
-            MessageBox.Show(this, $"Не удалось обновить:\n{ex.Message}", "Обновление",
+            MessageBox.Show(this, LocalizationService.Text("update.failed", ex.Message),
+                LocalizationService.Text("update.title"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
             _vm.IsBusy = false;
         }
@@ -199,25 +233,26 @@ public partial class MainWindow : Window
     private async Task DownloadForDeferredUpdateAsync(ReleaseInfo release)
     {
         _vm.IsBusy = true;
-        _vm.Status = $"Скачивание {release.Version} (установится при выходе)…";
+        _vm.Status = LocalizationService.Text("update.statusDownloadingDeferred", release.Version);
         try
         {
             var progress = new Progress<double>(p =>
-                _vm.Status = $"Скачивание {release.Version}… {(int)(p * 100)}%");
+                _vm.Status = LocalizationService.Text("update.statusDownloadingPct", release.Version, (int)(p * 100)));
             var zip = await UpdateInstaller.DownloadAsync(release, progress);
             _app.Ui.PendingUpdateVersion = release.Version;
             _app.Ui.PendingUpdateZipPath = zip;
             await _settings.SaveAsync(_app);
             AppLog.Default.Info("Update", $"Deferred update ready: {release.Version} @ {zip}");
-            _vm.Status = $"Обновление {release.Version} установится при выходе";
+            _vm.Status = LocalizationService.Text("update.statusDeferredReady", release.Version);
             MessageBox.Show(this,
-                $"Версия {release.Version} скачана.\nОна будет установлена при выходе из приложения (без автозапуска).",
-                "Обновление", MessageBoxButton.OK, MessageBoxImage.Information);
+                LocalizationService.Text("update.deferredReady", release.Version),
+                LocalizationService.Text("update.title"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             AppLog.Default.Error("Update", "Deferred download failed", ex);
-            MessageBox.Show(this, $"Не удалось скачать обновление:\n{ex.Message}", "Обновление",
+            MessageBox.Show(this, LocalizationService.Text("update.downloadFailed", ex.Message),
+                LocalizationService.Text("update.title"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -233,7 +268,9 @@ public partial class MainWindow : Window
         UpdateThemeToggleCaption();
         AppLog.Default.Info("Settings", $"Смена темы → {next}");
         await _settings.SaveAsync(_app);
-        _vm.Status = next == AppTheme.Dark ? "Тема: тёмная" : "Тема: светлая";
+        _vm.Status = next == AppTheme.Dark
+            ? LocalizationService.Text("status.themeDark")
+            : LocalizationService.Text("status.themeLight");
     }
 
     private void OpenLogs_Click(object sender, RoutedEventArgs e)
@@ -248,13 +285,14 @@ public partial class MainWindow : Window
                 Arguments = $"\"{dir}\"",
                 UseShellExecute = true
             });
-            _vm.Status = $"Логи: {dir}";
+            _vm.Status = LocalizationService.Text("status.logs", dir);
             AppLog.Default.Info("App", $"Opened log folder: {dir}");
         }
         catch (Exception ex)
         {
             AppLog.Default.Error("App", "Open logs folder failed", ex);
-            MessageBox.Show(this, $"Не удалось открыть папку логов:\n{ex.Message}", "Логи",
+            MessageBox.Show(this, LocalizationService.Text("msg.logsOpenFailed", ex.Message),
+                LocalizationService.Text("msg.logsTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -263,8 +301,8 @@ public partial class MainWindow : Window
     {
         // Button offers the *other* theme
         ThemeToggleButton.Content = ThemeManager.Current == AppTheme.Dark
-            ? "☀ Светлая"
-            : "🌙 Тёмная";
+            ? LocalizationService.Text("main.themeLight")
+            : LocalizationService.Text("main.themeDark");
     }
 
     private void ReloadProfilesUi()
@@ -370,6 +408,7 @@ public partial class MainWindow : Window
         _inAppScheduler = new InAppBackupScheduler(
             getApp: () => _app,
             runBackup: RunInAppBackupAsync,
+            saveApp: () => _settings.SaveAsync(_app),
             setStatus: s => _vm.Status = s);
     }
 
@@ -397,10 +436,10 @@ public partial class MainWindow : Window
             ReloadHistoryUi();
             RefreshArchives();
             _vm.Status = result.Skipped
-                ? (result.StatusMessage ?? "Изменений нет — архив не создан")
+                ? (result.StatusMessage ?? LocalizationService.Text("status.skipDefault"))
                 : result.Success
-                    ? $"Автобэкап OK: {result.ArchivePath}"
-                    : $"Автобэкап ошибка: {result.ErrorMessage}";
+                    ? LocalizationService.Text("status.autoBackupOk", result.ArchivePath)
+                    : LocalizationService.Text("status.autoBackupError", result.ErrorMessage);
         }
         finally
         {
@@ -422,7 +461,7 @@ public partial class MainWindow : Window
         _inAppScheduler!.Start();
         ReloadProfilesUi();
         _vm.SelectedProfile = _vm.Profiles.FirstOrDefault(p => p.Id == dlg.Profile.Id);
-        _vm.Status = $"Профиль «{dlg.Profile.Name}» создан";
+        _vm.Status = LocalizationService.Text("status.profileCreated", dlg.Profile.Name);
     }
 
     private async void EditProfile_Click(object sender, RoutedEventArgs e)
@@ -442,14 +481,15 @@ public partial class MainWindow : Window
         _inAppScheduler!.Start();
         ReloadProfilesUi();
         _vm.SelectedProfile = _vm.Profiles.FirstOrDefault(p => p.Id == dlg.Profile.Id);
-        _vm.Status = $"Профиль «{dlg.Profile.Name}» сохранён";
+        _vm.Status = LocalizationService.Text("status.profileSaved", dlg.Profile.Name);
     }
 
     private async void DeleteProfile_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedProfile is null) return;
         var p = _vm.SelectedProfile;
-        if (MessageBox.Show(this, $"Удалить профиль «{p.Name}»? Архивы на диске не трогаем.", "BackupSaves",
+        if (MessageBox.Show(this, LocalizationService.Text("msg.deleteProfile", p.Name),
+                LocalizationService.Text("common.appName"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
 
@@ -460,14 +500,14 @@ public partial class MainWindow : Window
         ReloadProfilesUi();
         _watcher.Watch(_app.Profiles);
         RefreshArchives();
-        _vm.Status = "Профиль удалён";
+        _vm.Status = LocalizationService.Text("status.profileDeleted");
     }
 
     private async void BackupNow_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedProfile is null || _vm.IsBusy) return;
         _vm.IsBusy = true;
-        _vm.Status = "Бэкап…";
+        _vm.Status = LocalizationService.Text("status.backup");
         try
         {
             var result = await _runner.RunProfileAsync(_vm.SelectedProfile.Id, RunTrigger.Manual);
@@ -475,12 +515,13 @@ public partial class MainWindow : Window
             ReloadHistoryUi();
             RefreshArchives();
             _vm.Status = result.Skipped
-                ? (result.StatusMessage ?? "Изменений нет — архив не создан")
+                ? (result.StatusMessage ?? LocalizationService.Text("status.skipDefault"))
                 : result.Success
-                    ? $"OK: {result.ArchivePath}"
-                    : $"Ошибка: {result.ErrorMessage}";
+                    ? LocalizationService.Text("status.backupOk", result.ArchivePath)
+                    : LocalizationService.Text("status.backupError", result.ErrorMessage);
             if (!result.Success)
-                MessageBox.Show(this, result.ErrorMessage, "Бэкап", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(this, result.ErrorMessage, LocalizationService.Text("msg.backupTitle"),
+                    MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -498,8 +539,8 @@ public partial class MainWindow : Window
         if (_vm.SelectedArchive is null || _vm.IsBusy) return;
 
         var confirm = MessageBox.Show(this,
-            $"Восстановить все файлы из «{_vm.SelectedArchive.Name}» в исходные папки?\nСуществующие файлы будут перезаписаны.",
-            "Восстановление", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            LocalizationService.Text("msg.restoreConfirm", _vm.SelectedArchive.Name),
+            LocalizationService.Text("msg.restoreTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes)
         {
             AppLog.Default.Info("Restore", "Пользователь отменил confirm");
@@ -508,14 +549,15 @@ public partial class MainWindow : Window
 
         AppLog.Default.Info("Restore", $"UI restore: \"{_vm.SelectedArchive.Path}\"");
         _vm.IsBusy = true;
-        _vm.Status = "Восстановление…";
+        _vm.Status = LocalizationService.Text("status.restoring");
         try
         {
             var result = await _restore.RestoreAsync(_vm.SelectedArchive.Path, overwrite: true);
             if (result.Success)
             {
-                _vm.Status = $"Восстановлено: {result.RestoredCount} файлов";
-                MessageBox.Show(this, $"Восстановлено файлов: {result.RestoredCount}", "Восстановление",
+                _vm.Status = LocalizationService.Text("status.restored", result.RestoredCount);
+                MessageBox.Show(this, LocalizationService.Text("msg.restoreOk", result.RestoredCount),
+                    LocalizationService.Text("msg.restoreTitle"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
@@ -524,7 +566,8 @@ public partial class MainWindow : Window
                 if (result.Errors.Count > 0)
                     details += "\n\n" + string.Join("\n", result.Errors.Take(15).Select(x => $"{x.SourcePath}: {x.Message}"));
                 _vm.Status = details.Split('\n')[0];
-                MessageBox.Show(this, details, "Восстановление — ошибки", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, details, LocalizationService.Text("msg.restoreErrors"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
         finally
@@ -549,7 +592,8 @@ public partial class MainWindow : Window
         var path = _vm.SelectedArchive.Path;
         if (!File.Exists(path))
         {
-            MessageBox.Show(this, "Файл архива не найден.", "Архивы", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, LocalizationService.Text("msg.archiveMissing"),
+                LocalizationService.Text("msg.archivesTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
             RefreshArchives();
             return;
         }
@@ -567,7 +611,8 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLog.Default.Error("App", "Reveal in explorer failed", ex);
-            MessageBox.Show(this, $"Не удалось открыть проводник:\n{ex.Message}", "Архивы",
+            MessageBox.Show(this, LocalizationService.Text("msg.explorerFailed", ex.Message),
+                LocalizationService.Text("msg.archivesTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -579,8 +624,8 @@ public partial class MainWindow : Window
         var name = _vm.SelectedArchive.Name;
         var path = _vm.SelectedArchive.Path;
         if (MessageBox.Show(this,
-                $"Удалить архив «{name}»?\nФайл будет удалён с диска безвозвратно.",
-                "Удаление архива", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                LocalizationService.Text("msg.deleteArchive", name),
+                LocalizationService.Text("msg.deleteArchiveTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
         try
@@ -588,13 +633,14 @@ public partial class MainWindow : Window
             if (File.Exists(path))
                 File.Delete(path);
             AppLog.Default.Info("App", $"Archive deleted: \"{path}\"");
-            _vm.Status = $"Удалён: {name}";
+            _vm.Status = LocalizationService.Text("status.deleted", name);
             RefreshArchives();
         }
         catch (Exception ex)
         {
             AppLog.Default.Error("App", $"Delete archive failed: \"{path}\"", ex);
-            MessageBox.Show(this, $"Не удалось удалить архив:\n{ex.Message}", "Удаление архива",
+            MessageBox.Show(this, LocalizationService.Text("msg.deleteArchiveFailed", ex.Message),
+                LocalizationService.Text("msg.deleteArchiveTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -612,7 +658,7 @@ public partial class MainWindow : Window
         if (WindowState == WindowState.Minimized && _app.Ui.MinimizeToTray)
         {
             Hide();
-            _tray!.ShowBalloonTip(1500, "BackupSaves", "Свёрнуто в трей", WinForms.ToolTipIcon.Info);
+            _tray!.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.minimized"), WinForms.ToolTipIcon.Info);
         }
     }
 
@@ -621,6 +667,13 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
+    }
+
+    private void ForceExit_Click(object sender, RoutedEventArgs e)
+    {
+        AppLog.Default.Info("App", "Выход без подтверждения (кнопка История)");
+        _reallyClose = true;
+        Close();
     }
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -642,7 +695,7 @@ public partial class MainWindow : Window
             case CloseChoice.HideToTray:
                 AppLog.Default.Info("App", "Пользователь скрыл приложение в трей");
                 Hide();
-                _tray?.ShowBalloonTip(1500, "BackupSaves", "Работает в трее", WinForms.ToolTipIcon.Info);
+                _tray?.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.running"), WinForms.ToolTipIcon.Info);
                 break;
             case CloseChoice.Exit:
                 AppLog.Default.Info("App", "Пользователь подтвердил выход");

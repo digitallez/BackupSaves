@@ -37,9 +37,28 @@ public sealed class BackupRunner : IBackupRunner
 
         var started = DateTimeOffset.UtcNow;
         BackupResult result;
+
         try
         {
-            result = await _backup.BackupAsync(profile, ct);
+            if (ShouldSkipForProcessWatch(profile, out var skipMessage, out var farewell))
+            {
+                _log.Info("Backup",
+                    $"Пропуск по процессу «{profile.Name}»: {skipMessage}");
+                result = BackupResult.SkippedReason(skipMessage!);
+            }
+            else
+            {
+                if (farewell)
+                    _log.Info("Backup", $"Прощальный бэкап «{profile.Name}»: процесс только что завершился");
+
+                result = await _backup.BackupAsync(profile, ct);
+            }
+
+            if (profile.WatchProcessEnabled && ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
+            {
+                profile.WatchProcessWasRunning =
+                    ProcessWatchService.IsAnyMatchingProcessRunning(profile.WatchProcessPattern);
+            }
         }
         catch (Exception ex)
         {
@@ -75,7 +94,7 @@ public sealed class BackupRunner : IBackupRunner
             Message = result.Skipped
                 ? result.StatusMessage
                 : result.Success
-                    ? $"Файлов: {result.FilesArchived}"
+                    ? $"Файлов: {result.FilesArchived} • есть изменения • архив создан"
                     : result.ErrorMessage,
             ArchivePath = result.ArchivePath,
             Trigger = trigger
@@ -87,5 +106,31 @@ public sealed class BackupRunner : IBackupRunner
         await _settings.SaveAsync(app, ct);
         _log.Info("Settings", "История запусков обновлена после бэкапа");
         return result;
+    }
+
+    /// <summary>
+    /// Returns true if backup must be skipped because watch is on and process is not running
+    /// (and this is not the farewell backup after exit).
+    /// </summary>
+    public static bool ShouldSkipForProcessWatch(BackupProfile profile, out string? message, out bool farewell)
+    {
+        message = null;
+        farewell = false;
+
+        if (!profile.WatchProcessEnabled || !ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
+            return false;
+
+        var running = ProcessWatchService.IsAnyMatchingProcessRunning(profile.WatchProcessPattern);
+        if (running)
+            return false;
+
+        if (profile.WatchProcessWasRunning)
+        {
+            farewell = true;
+            return false;
+        }
+
+        message = $"Процесс «{profile.WatchProcessPattern}» не запущен — бэкап пропущен";
+        return true;
     }
 }

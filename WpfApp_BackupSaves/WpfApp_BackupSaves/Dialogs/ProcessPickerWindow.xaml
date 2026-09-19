@@ -1,0 +1,43 @@
+<Window x:Class="WpfApp_BackupSaves.Dialogs.ProcessPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:WpfApp_BackupSaves.Controls"
+        xmlns:loc="clr-namespace:WpfApp_BackupSaves.Markup"
+        Title="{loc:Loc process.title}" Height="740" Width="1080"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
+        Icon="pack://application:,,,/Assets/app.ico"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource PrimaryTextBrush}"
+        ContentRendered="Window_ContentRendered">
+  <DockPanel>
+    <controls:CustomTitleBar DockPanel.Dock="Top" ShowMaximize="True"/>
+
+    <DockPanel Margin="16">
+      <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <Button x:Name="OkButton" Content="{loc:Loc process.select}" Width="110" Height="32" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
+        <Button Content="{loc:Loc common.cancel}" Width="110" Height="32" IsCancel="True" Click="Cancel_Click"/>
+      </StackPanel>
+
+      <Grid>
+        <DockPanel x:Name="ContentPanel" Visibility="Collapsed">
+          <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <Button x:Name="RefreshButton" DockPanel.Dock="Right" Content="{loc:Loc process.refresh}" Width="100" Height="28"
+                    Margin="6,0,0,0" Click="Refresh_Click"/>
+            <TextBlock DockPanel.Dock="Left" Text="{loc:Loc process.filter}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBox x:Name="FilterBox" Height="28" VerticalContentAlignment="Center"
+                     TextChanged="FilterBox_TextChanged"/>
+          </DockPanel>
+          <ListBox x:Name="ProcessList" DisplayMemberPath="Display"
+                   MouseDoubleClick="ProcessList_MouseDoubleClick"/>
+        </DockPanel>
+
+        <StackPanel x:Name="LoadingPanel" VerticalAlignment="Center" HorizontalAlignment="Center">
+          <ProgressBar Width="280" Height="6" IsIndeterminate="True"/>
+          <TextBlock Text="{loc:Loc process.loading}" Margin="0,12,0,0"
+                     HorizontalAlignment="Center"
+                     Foreground="{DynamicResource SecondaryTextBrush}"/>
+        </StackPanel>
+      </Grid>
+    </DockPanel>
+  </DockPanel>
+</Window>

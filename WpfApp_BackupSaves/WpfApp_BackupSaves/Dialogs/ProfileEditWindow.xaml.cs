@@ -2,6 +2,7 @@ using System.Windows;
 using MessageBox = System.Windows.MessageBox;
 using BackupSaves.Core.IO;
 using BackupSaves.Core.Models;
+using BackupSaves.Core.Services;
 using WpfApp_BackupSaves.Services;
 using WinForms = System.Windows.Forms;
 
@@ -23,6 +24,8 @@ public partial class ProfileEditWindow : Window
         RootBox.Text = Profile.BackupRoot;
         RetentionBox.Text = Profile.RetentionCount.ToString();
         ChecksumSkipBox.IsChecked = Profile.SkipUnchangedByChecksum;
+        WatchProcessEnabled.IsChecked = Profile.WatchProcessEnabled;
+        WatchProcessBox.Text = Profile.WatchProcessPattern ?? "";
         FormatBox.SelectedIndex = Profile.Format == ArchiveFormat.Zip ? 1 : 0;
         ScheduleEnabled.IsChecked = Profile.Schedule.Enabled;
         InAppScheduleEnabled.IsChecked = Profile.Schedule.InAppEnabled;
@@ -66,6 +69,9 @@ public partial class ProfileEditWindow : Window
         Format = p.Format,
         RetentionCount = p.RetentionCount,
         SkipUnchangedByChecksum = p.SkipUnchangedByChecksum,
+        WatchProcessEnabled = p.WatchProcessEnabled,
+        WatchProcessPattern = p.WatchProcessPattern,
+        WatchProcessWasRunning = p.WatchProcessWasRunning,
         Sources = p.Sources.Select(s => new SourceEntry { Path = s.Path, Type = s.Type }).ToList(),
         Schedule = new ScheduleConfig
         {
@@ -83,18 +89,37 @@ public partial class ProfileEditWindow : Window
     {
         using var dlg = new WinForms.FolderBrowserDialog
         {
-            Description = "Папка назначения бэкапов",
+            Description = LocalizationService.Text("profile.browseRootDesc"),
             UseDescriptionForTitle = true
         };
         if (dlg.ShowDialog() == WinForms.DialogResult.OK)
             RootBox.Text = dlg.SelectedPath;
     }
 
+    private void BrowseExe_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = LocalizationService.Text("profile.browseExeTitle"),
+            Filter = LocalizationService.Text("profile.browseExeFilter"),
+            CheckFileExists = true
+        };
+        if (dlg.ShowDialog(this) == true)
+            WatchProcessBox.Text = dlg.FileName;
+    }
+
+    private void PickProcess_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new ProcessPickerWindow { Owner = this };
+        if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.SelectedPattern))
+            WatchProcessBox.Text = dlg.SelectedPattern;
+    }
+
     private void AddFolder_Click(object sender, RoutedEventArgs e)
     {
         using var dlg = new WinForms.FolderBrowserDialog
         {
-            Description = "Папка с сейвами",
+            Description = LocalizationService.Text("profile.browseFolderDesc"),
             UseDescriptionForTitle = true
         };
         if (dlg.ShowDialog() != WinForms.DialogResult.OK)
@@ -106,7 +131,11 @@ public partial class ProfileEditWindow : Window
 
     private void AddFile_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = "Файлы сейвов" };
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Multiselect = true,
+            Title = LocalizationService.Text("profile.browseFilesTitle")
+        };
         if (dlg.ShowDialog(this) != true)
             return;
 
@@ -128,25 +157,39 @@ public partial class ProfileEditWindow : Window
     {
         if (string.IsNullOrWhiteSpace(NameBox.Text))
         {
-            MessageBox.Show(this, "Укажите имя профиля.", "BackupSaves", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, LocalizationService.Text("profile.errName"),
+                LocalizationService.Text("common.appName"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(RootBox.Text))
         {
-            MessageBox.Show(this, "Укажите папку бэкапов.", "BackupSaves", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, LocalizationService.Text("profile.errRoot"),
+                LocalizationService.Text("common.appName"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         if (Profile.Sources.Count == 0)
         {
-            MessageBox.Show(this, "Добавьте хотя бы один источник.", "BackupSaves", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, LocalizationService.Text("profile.errSources"),
+                LocalizationService.Text("common.appName"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         if (!int.TryParse(RetentionBox.Text, out var retention) || retention < 1)
         {
-            MessageBox.Show(this, "Лимит архивов должен быть ≥ 1.", "BackupSaves", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, LocalizationService.Text("profile.errRetention"),
+                LocalizationService.Text("common.appName"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var watchEnabled = WatchProcessEnabled.IsChecked == true;
+        var watchPattern = WatchProcessBox.Text?.Trim();
+        if (watchEnabled && !ProcessWatchService.IsMatchPatternConfigured(watchPattern))
+        {
+            MessageBox.Show(this, LocalizationService.Text("profile.errWatchProcess"),
+                LocalizationService.Text("common.appName"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -155,6 +198,18 @@ public partial class ProfileEditWindow : Window
         Profile.BackupRoot = RootBox.Text.Trim();
         Profile.RetentionCount = retention;
         Profile.SkipUnchangedByChecksum = ChecksumSkipBox.IsChecked == true;
+        Profile.WatchProcessEnabled = watchEnabled;
+        Profile.WatchProcessPattern = string.IsNullOrWhiteSpace(watchPattern) ? null : watchPattern;
+        if (Profile.WatchProcessEnabled && ProcessWatchService.IsMatchPatternConfigured(Profile.WatchProcessPattern))
+        {
+            Profile.WatchProcessWasRunning =
+                ProcessWatchService.IsAnyMatchingProcessRunning(Profile.WatchProcessPattern);
+        }
+        else
+        {
+            Profile.WatchProcessWasRunning = false;
+        }
+
         Profile.Format = (FormatBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() == "Zip"
             ? ArchiveFormat.Zip
             : ArchiveFormat.SevenZip;
@@ -186,7 +241,8 @@ public partial class ProfileEditWindow : Window
         {
             if (Profile.Schedule.IntervalMinutes is null or < 1)
             {
-                MessageBox.Show(this, "Для автобэкапа в программе укажите интервал (минуты) ≥ 1.", "BackupSaves",
+                MessageBox.Show(this, LocalizationService.Text("profile.errInterval"),
+                    LocalizationService.Text("common.appName"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }

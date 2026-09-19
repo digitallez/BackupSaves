@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:WpfApp_BackupSaves.Controls"
-        Title="Обновление BackupSaves"
+        xmlns:loc="clr-namespace:WpfApp_BackupSaves.Markup"
+        Title="{loc:Loc update.windowTitle}"
         Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -20,16 +21,16 @@
                  Foreground="{DynamicResource SecondaryTextBrush}"
                  TextWrapping="Wrap" Margin="0,0,0,16"/>
 
-      <Button Content="Обновить сейчас" Height="36" Margin="0,0,0,8"
+      <Button Content="{loc:Loc update.now}" Height="36" Margin="0,0,0,8"
               Click="Now_Click" IsDefault="True"
-              ToolTip="Скачать, установить и перезапустить приложение"/>
-      <Button Content="Обновить при закрытии" Height="36" Margin="0,0,0,8"
+              ToolTip="{loc:Loc update.nowTip}"/>
+      <Button Content="{loc:Loc update.onClose}" Height="36" Margin="0,0,0,8"
               Click="OnClose_Click"
-              ToolTip="Скачать заранее; установить при выходе из приложения (без автозапуска)"/>
-      <Button Content="Не обновлять на эту версию" Height="36" Margin="0,0,0,8"
+              ToolTip="{loc:Loc update.onCloseTip}"/>
+      <Button Content="{loc:Loc update.skip}" Height="36" Margin="0,0,0,8"
               Click="Skip_Click"
-              ToolTip="Больше не предлагать именно эту версию"/>
-      <Button Content="Спросить позже" Height="36"
+              ToolTip="{loc:Loc update.skipTip}"/>
+      <Button Content="{loc:Loc update.later}" Height="36"
               Click="Later_Click" IsCancel="True"/>
     </StackPanel>
   </DockPanel>

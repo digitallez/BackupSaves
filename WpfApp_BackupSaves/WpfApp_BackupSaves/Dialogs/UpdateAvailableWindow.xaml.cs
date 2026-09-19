@@ -11,8 +11,8 @@ public partial class UpdateAvailableWindow : Window
     {
         InitializeComponent();
         CustomWindowChrome.Apply(this);
-        TitleBlock.Text = $"Доступна версия {newVersion}";
-        var body = $"Сейчас установлена: {currentVersion}\n\nПриложение скачает пакет с GitHub Releases и установит обновление.";
+        TitleBlock.Text = LocalizationService.Text("update.available", newVersion);
+        var body = LocalizationService.Text("update.body", currentVersion);
         if (!string.IsNullOrWhiteSpace(notes))
         {
             var trimmed = notes.Trim();

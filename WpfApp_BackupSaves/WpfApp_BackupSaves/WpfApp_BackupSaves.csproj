@@ -34,6 +34,15 @@
 
   <ItemGroup>
     <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\Flags\ru.png" />
+    <Resource Include="Assets\Flags\us.png" />
+  </ItemGroup>
+
+  <!-- Locales JSON (+ optional .png flags) copied next to the exe -->
+  <ItemGroup>
+    <Content Include="Locales\**\*"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Bump patch only on Release builds (skip Debug, design-time, WPF _wpftmp) -->
