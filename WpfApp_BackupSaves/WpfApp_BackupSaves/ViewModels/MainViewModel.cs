@@ -194,11 +194,16 @@ public sealed class LanguageOption
     public string Display => !string.IsNullOrWhiteSpace(Name) ? Name : Code;
 }
 
+public sealed class HistoryLoadMoreItem
+{
+    public string Caption { get; set; } = "";
+}
+
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     public ObservableCollection<ProfileListItem> Profiles { get; } = [];
     public ObservableCollection<ArchiveListItem> Archives { get; } = [];
-    public ObservableCollection<RunHistoryEntry> History { get; } = [];
+    public ObservableCollection<object> History { get; } = [];
     public ObservableCollection<LanguageOption> Languages { get; } = [];
 
     private LanguageOption? _selectedLanguage;

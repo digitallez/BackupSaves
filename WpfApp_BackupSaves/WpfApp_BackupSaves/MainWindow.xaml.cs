@@ -18,8 +18,9 @@ namespace WpfApp_BackupSaves;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
-    private readonly ISettingsStore _settings = new SettingsStore();
-    private readonly IBackupRunner _runner = new BackupRunner();
+    private readonly ISettingsStore _settings;
+    private readonly IHistoryStore _historyStore;
+    private readonly IBackupRunner _runner;
     private readonly IRestoreService _restore = new RestoreService();
     private readonly IWindowsTaskSchedulerService _scheduler = new WindowsTaskSchedulerService();
     private readonly ArchiveFolderWatcher _watcher;
@@ -28,6 +29,8 @@ public partial class MainWindow : Window
     private bool _cleanedUp;
     private bool _updateCheckStarted;
     private AppSettings _app = new();
+    private bool _historyFullyLoaded;
+    private int _historyHiddenCount;
     private readonly IUpdateChecker _updateChecker = new GitHubReleaseUpdateChecker();
     private InAppBackupScheduler? _inAppScheduler;
     private DispatcherTimer? _profilesLiveTimer;
@@ -38,6 +41,10 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        _settings = new SettingsStore();
+        _historyStore = new HistoryStore(_settings);
+        _runner = new BackupRunner(_settings, _historyStore);
+
         InitializeComponent();
         CustomWindowChrome.Apply(this);
         Title = $"BackupSaves {AppVersion.Current}";
@@ -52,6 +59,7 @@ public partial class MainWindow : Window
                 RebuildTrayMenu();
                 UpdateThemeToggleCaption();
                 RefreshProfilesLive();
+                RefreshHistoryLoadMoreCaption();
             });
         };
         Loaded += async (_, _) => await LoadAsync();
@@ -131,7 +139,7 @@ public partial class MainWindow : Window
         UpdateThemeToggleCaption();
         RebuildTrayMenu();
         ReloadProfilesUi();
-        ReloadHistoryUi();
+        await ReloadHistoryUiAsync();
         _watcher.Watch(_app.Profiles);
         _vm.Status = LocalizationService.Text("status.logs", AppLog.Default.LogDirectory);
         AppLog.Default.Info("App",
@@ -453,11 +461,20 @@ public partial class MainWindow : Window
         _taskNextRunCacheAt = now;
     }
 
-    private void ReloadHistoryUi()
+    private async Task ReloadHistoryUiAsync(bool loadAll = false)
     {
+        var all = await _historyStore.LoadAsync();
+        if (loadAll)
+            _historyFullyLoaded = true;
+
+        var take = _historyFullyLoaded
+            ? all.Count
+            : Math.Min(HistoryStore.UiInitialCount, all.Count);
+
         _vm.History.Clear();
-        foreach (var h in _app.History.Take(50))
+        for (var i = 0; i < take; i++)
         {
+            var h = all[i];
             if (string.IsNullOrWhiteSpace(h.ProfileName))
             {
                 h.ProfileName = _app.Profiles.FirstOrDefault(p => p.Id == h.ProfileId)?.Name
@@ -466,6 +483,38 @@ public partial class MainWindow : Window
 
             _vm.History.Add(h);
         }
+
+        if (!_historyFullyLoaded && all.Count > take)
+        {
+            _historyHiddenCount = all.Count - take;
+            _vm.History.Add(new HistoryLoadMoreItem
+            {
+                Caption = LocalizationService.Text("history.loadAll", _historyHiddenCount)
+            });
+        }
+        else
+        {
+            _historyHiddenCount = 0;
+        }
+    }
+
+    private void RefreshHistoryLoadMoreCaption()
+    {
+        if (_historyHiddenCount <= 0) return;
+        for (var i = 0; i < _vm.History.Count; i++)
+        {
+            if (_vm.History[i] is not HistoryLoadMoreItem) continue;
+            _vm.History[i] = new HistoryLoadMoreItem
+            {
+                Caption = LocalizationService.Text("history.loadAll", _historyHiddenCount)
+            };
+            return;
+        }
+    }
+
+    private async void LoadAllHistory_Click(object sender, RoutedEventArgs e)
+    {
+        await ReloadHistoryUiAsync(loadAll: true);
     }
 
     private void Profiles_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -572,7 +621,7 @@ public partial class MainWindow : Window
                 await _settings.SaveAsync(_app);
             }
 
-            ReloadHistoryUi();
+            await ReloadHistoryUiAsync();
             RefreshArchives();
             RefreshProfilesLive();
             _vm.Status = result.Skipped
@@ -652,7 +701,7 @@ public partial class MainWindow : Window
         {
             var result = await _runner.RunProfileAsync(_vm.SelectedProfile.Id, RunTrigger.Manual);
             _app = await _settings.LoadAsync();
-            ReloadHistoryUi();
+            await ReloadHistoryUiAsync();
             RefreshArchives();
             RefreshProfilesLive();
             _vm.Status = result.Skipped

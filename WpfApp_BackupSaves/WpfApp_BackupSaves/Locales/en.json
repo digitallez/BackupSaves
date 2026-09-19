@@ -146,6 +146,8 @@
   "msg.archivesTitle": "Archives",
   "msg.logsTitle": "Logs",
   "history.profileDeleted": "Deleted profile",
+  "history.loadAll": "Show full history (+{0})",
+  "history.loadAllTooltip": "Load all entries from the history file",
   "core.noSources": "Profile has no sources.",
   "core.noBackupRoot": "BackupRoot is not set.",
   "core.sourceOverlapsRoot": "Source overlaps BackupRoot: {0}",

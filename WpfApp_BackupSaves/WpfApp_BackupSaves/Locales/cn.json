@@ -146,6 +146,8 @@
   "msg.archivesTitle": "归档",
   "msg.logsTitle": "日志",
   "history.profileDeleted": "已删除的配置",
+  "history.loadAll": "显示全部历史 (+{0})",
+  "history.loadAllTooltip": "从历史文件加载全部记录",
   "core.noSources": "配置没有源。",
   "core.noBackupRoot": "未设置 BackupRoot。",
   "core.sourceOverlapsRoot": "源与 BackupRoot 重叠：{0}",

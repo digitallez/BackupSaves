@@ -146,6 +146,8 @@
   "msg.archivesTitle": "Архіви",
   "msg.logsTitle": "Журнали",
   "history.profileDeleted": "Профіль видалено",
+  "history.loadAll": "Показати всю історію (+{0})",
+  "history.loadAllTooltip": "Завантажити всі записи з файлу історії",
   "core.noSources": "У профілю немає джерел.",
   "core.noBackupRoot": "Не вказано BackupRoot.",
   "core.sourceOverlapsRoot": "Джерело перетинається з BackupRoot: {0}",

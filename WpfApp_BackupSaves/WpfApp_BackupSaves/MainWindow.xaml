@@ -3,6 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:WpfApp_BackupSaves.Controls"
         xmlns:loc="clr-namespace:WpfApp_BackupSaves.Markup"
+        xmlns:vm="clr-namespace:WpfApp_BackupSaves.ViewModels"
+        xmlns:models="clr-namespace:BackupSaves.Core.Models;assembly=BackupSaves.Core"
         Title="BackupSaves" Height="740" Width="1080"
         WindowStartupLocation="CenterScreen"
         Icon="pack://application:,,,/Assets/app.ico"
@@ -181,8 +183,8 @@
         <Button DockPanel.Dock="Bottom" Content="{loc:Loc main.exit}" Height="30" Margin="0,8,0,0"
                 Click="ForceExit_Click" ToolTip="{loc:Loc main.exitTooltip}"/>
         <ListBox ItemsSource="{Binding History}">
-          <ListBox.ItemTemplate>
-            <DataTemplate>
+          <ListBox.Resources>
+            <DataTemplate DataType="{x:Type models:RunHistoryEntry}">
               <StackPanel Margin="0,2">
                 <DockPanel LastChildFill="True">
                   <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" VerticalAlignment="Center">
@@ -208,10 +210,38 @@
                     </TextBlock.Style>
                   </TextBlock>
                   <Ellipse DockPanel.Dock="Left" Width="5" Height="5" Margin="8,0"
-                           VerticalAlignment="Center"
-                           Fill="{DynamicResource SecondaryTextBrush}"/>
+                           VerticalAlignment="Center">
+                    <Ellipse.Style>
+                      <Style TargetType="Ellipse">
+                        <Setter Property="Fill" Value="{DynamicResource SecondaryTextBrush}"/>
+                        <Style.Triggers>
+                          <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                              <Condition Binding="{Binding Success}" Value="True"/>
+                              <Condition Binding="{Binding Skipped}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Fill" Value="{DynamicResource OkBrush}"/>
+                          </MultiDataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Ellipse.Style>
+                  </Ellipse>
                   <TextBlock Text="{Binding ProfileName}" FontWeight="SemiBold"
-                             TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                             TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                          <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                              <Condition Binding="{Binding Success}" Value="True"/>
+                              <Condition Binding="{Binding Skipped}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Foreground" Value="{DynamicResource OkBrush}"/>
+                          </MultiDataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
                 </DockPanel>
                 <TextBlock FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}">
                   <TextBlock.Text>
@@ -224,7 +254,13 @@
                 <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="11"/>
               </StackPanel>
             </DataTemplate>
-          </ListBox.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:HistoryLoadMoreItem}">
+              <Button Margin="0,8,0,4" Padding="8,6" HorizontalAlignment="Stretch"
+                      Content="{Binding Caption}"
+                      Click="LoadAllHistory_Click"
+                      ToolTip="{loc:Loc history.loadAllTooltip}"/>
+            </DataTemplate>
+          </ListBox.Resources>
         </ListBox>
       </DockPanel>
     </Grid>

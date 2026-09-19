@@ -12,12 +12,18 @@ public interface IBackupRunner
 public sealed class BackupRunner : IBackupRunner
 {
     private readonly ISettingsStore _settings;
+    private readonly IHistoryStore _history;
     private readonly IBackupService _backup;
     private readonly IAppLog _log;
 
-    public BackupRunner(ISettingsStore? settings = null, IBackupService? backup = null, IAppLog? log = null)
+    public BackupRunner(
+        ISettingsStore? settings = null,
+        IHistoryStore? history = null,
+        IBackupService? backup = null,
+        IAppLog? log = null)
     {
         _settings = settings ?? new SettingsStore();
+        _history = history ?? new HistoryStore(_settings);
         _backup = backup ?? new BackupService();
         _log = log ?? AppLog.Default;
     }
@@ -86,7 +92,7 @@ public sealed class BackupRunner : IBackupRunner
             _log.Error("Backup", $"Failed: «{profile.Name}» — {result.ErrorMessage}");
         }
 
-        app.History.Insert(0, new RunHistoryEntry
+        await _history.AppendAsync(new RunHistoryEntry
         {
             ProfileId = profileId,
             ProfileName = profile.Name,
@@ -101,13 +107,10 @@ public sealed class BackupRunner : IBackupRunner
                     : result.ErrorMessage,
             ArchivePath = result.ArchivePath,
             Trigger = trigger
-        });
-
-        if (app.History.Count > 200)
-            app.History = app.History.Take(200).ToList();
+        }, ct);
 
         await _settings.SaveAsync(app, ct);
-        _log.Info("Settings", "Run history updated after backup");
+        _log.Info("History", "Run history updated after backup");
         return result;
     }
 
