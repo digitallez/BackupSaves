@@ -11,7 +11,10 @@
   <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#3C3C41"/>
   <SolidColorBrush x:Key="ButtonHoverBrush" Color="#4A4A50"/>
   <SolidColorBrush x:Key="SelectionBrush" Color="#264F78"/>
+  <SolidColorBrush x:Key="ProcessRunningBrush" Color="#4CAF50"/>
+  <SolidColorBrush x:Key="ProcessRunningBackgroundBrush" Color="#1B3D24"/>
   <SolidColorBrush x:Key="OkBrush" Color="#81C784"/>
+  <SolidColorBrush x:Key="SkipBrush" Color="#A0A0A0"/>
   <SolidColorBrush x:Key="FailBrush" Color="#EF5350"/>
   <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#323233"/>
   <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#252526"/>

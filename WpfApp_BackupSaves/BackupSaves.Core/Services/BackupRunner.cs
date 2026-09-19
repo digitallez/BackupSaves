@@ -92,11 +92,12 @@ public sealed class BackupRunner : IBackupRunner
             ProfileName = profile.Name,
             StartedUtc = started,
             FinishedUtc = DateTimeOffset.UtcNow,
-            Success = result.Success,
+            Success = result.Success && !result.Skipped,
+            Skipped = result.Skipped,
             Message = result.Skipped
-                ? result.StatusMessage
+                ? (result.StatusMessage ?? LocalizationService.Text("core.filesCount", result.FilesArchived))
                 : result.Success
-                    ? LocalizationService.Text("core.archiveCreated", result.FilesArchived)
+                    ? LocalizationService.Text("core.filesCount", result.FilesArchived)
                     : result.ErrorMessage,
             ArchivePath = result.ArchivePath,
             Trigger = trigger

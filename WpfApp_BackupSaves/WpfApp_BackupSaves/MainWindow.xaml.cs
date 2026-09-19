@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Windows;
+using System.Windows.Threading;
 using MessageBox = System.Windows.MessageBox;
 using BackupSaves.Core.IO;
 using BackupSaves.Core.Models;
@@ -28,6 +30,11 @@ public partial class MainWindow : Window
     private AppSettings _app = new();
     private readonly IUpdateChecker _updateChecker = new GitHubReleaseUpdateChecker();
     private InAppBackupScheduler? _inAppScheduler;
+    private DispatcherTimer? _profilesLiveTimer;
+    private readonly Dictionary<Guid, DateTimeOffset?> _taskNextRunCache = new();
+    private DateTimeOffset _taskNextRunCacheAt = DateTimeOffset.MinValue;
+    private readonly Dictionary<Guid, bool> _watchRunningCache = new();
+    private int _profilesLiveGate;
 
     public MainWindow()
     {
@@ -44,6 +51,7 @@ public partial class MainWindow : Window
             {
                 RebuildTrayMenu();
                 UpdateThemeToggleCaption();
+                RefreshProfilesLive();
             });
         };
         Loaded += async (_, _) => await LoadAsync();
@@ -131,6 +139,7 @@ public partial class MainWindow : Window
 
         EnsureInAppScheduler();
         _inAppScheduler!.Start();
+        StartProfilesLiveTimer();
 
         if (!_updateCheckStarted)
         {
@@ -310,10 +319,138 @@ public partial class MainWindow : Window
         var selectedId = _vm.SelectedProfile?.Id;
         _vm.Profiles.Clear();
         foreach (var p in _app.Profiles.OrderBy(p => p.Name))
-            _vm.Profiles.Add(p);
+            _vm.Profiles.Add(new ProfileListItem(p));
         _vm.SelectedProfile = selectedId is Guid id
             ? _vm.Profiles.FirstOrDefault(p => p.Id == id)
             : _vm.Profiles.FirstOrDefault();
+        InvalidateTaskNextRunCache();
+        RefreshProfilesLive();
+    }
+
+    private void StartProfilesLiveTimer()
+    {
+        if (_profilesLiveTimer is not null)
+            return;
+
+        _profilesLiveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _profilesLiveTimer.Tick += (_, _) => RefreshProfilesLive();
+        _profilesLiveTimer.Start();
+        RefreshProfilesLive();
+    }
+
+    private void InvalidateTaskNextRunCache()
+    {
+        _taskNextRunCache.Clear();
+        _taskNextRunCacheAt = DateTimeOffset.MinValue;
+        _watchRunningCache.Clear();
+    }
+
+    private void RefreshProfilesLive()
+    {
+        if (_vm.Profiles.Count == 0)
+            return;
+
+        _ = RefreshProfilesLiveAsync();
+    }
+
+    private async Task RefreshProfilesLiveAsync()
+    {
+        if (_vm.Profiles.Count == 0)
+            return;
+
+        if (Interlocked.CompareExchange(ref _profilesLiveGate, 1, 0) != 0)
+            return;
+
+        try
+        {
+            var now = DateTimeOffset.Now;
+            EnsureTaskNextRunCache(now);
+            await EnsureWatchRunningCacheAsync();
+
+            foreach (var item in _vm.Profiles)
+            {
+                var profile = _app.Profiles.FirstOrDefault(p => p.Id == item.Id) ?? item.Profile;
+                _taskNextRunCache.TryGetValue(profile.Id, out var next);
+                _watchRunningCache.TryGetValue(profile.Id, out var running);
+                item.Refresh(profile, now, next, running);
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _profilesLiveGate, 0);
+        }
+    }
+
+    private Task EnsureWatchRunningCacheAsync()
+    {
+        var shortest = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
+        var profilePatterns = new List<(Guid Id, string? Pattern, bool WatchOn)>();
+
+        foreach (var profile in _app.Profiles)
+        {
+            var watchOn = profile.WatchProcessEnabled
+                          && ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern);
+            profilePatterns.Add((profile.Id, profile.WatchProcessPattern, watchOn));
+            if (!watchOn)
+                continue;
+
+            var key = profile.WatchProcessPattern!.Trim();
+            var interval = TimeSpan.FromSeconds(
+                Math.Max(1, profile.WatchProcessScanSeconds <= 0 ? 10 : profile.WatchProcessScanSeconds));
+            if (!shortest.TryGetValue(key, out var existing) || interval < existing)
+                shortest[key] = interval;
+        }
+
+        return ApplyWatchRunningCacheAsync(shortest, profilePatterns);
+    }
+
+    private async Task ApplyWatchRunningCacheAsync(
+        Dictionary<string, TimeSpan> shortest,
+        List<(Guid Id, string? Pattern, bool WatchOn)> profilePatterns)
+    {
+        var runningMap = shortest.Count == 0
+            ? (IReadOnlyDictionary<string, bool>)new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+            : await Task.Run(() => ProcessWatchService.EvaluatePatterns(
+                shortest.Select(kv => (kv.Key, (TimeSpan?)kv.Value)))).ConfigureAwait(true);
+
+        var liveIds = new HashSet<Guid>();
+        foreach (var (id, pattern, watchOn) in profilePatterns)
+        {
+            liveIds.Add(id);
+            if (!watchOn)
+            {
+                _watchRunningCache[id] = false;
+                continue;
+            }
+
+            _watchRunningCache[id] = pattern is not null
+                && runningMap.TryGetValue(pattern.Trim(), out var running)
+                && running;
+        }
+
+        foreach (var stale in _watchRunningCache.Keys.Where(id => !liveIds.Contains(id)).ToList())
+            _watchRunningCache.Remove(stale);
+    }
+
+    private void EnsureTaskNextRunCache(DateTimeOffset now)
+    {
+        if (now - _taskNextRunCacheAt < TimeSpan.FromSeconds(30) && _taskNextRunCache.Count > 0)
+            return;
+
+        _taskNextRunCache.Clear();
+        foreach (var profile in _app.Profiles)
+        {
+            DateTimeOffset? next = null;
+            if (profile.Schedule.Enabled)
+            {
+                try { next = _scheduler.GetNextRunTime(profile); }
+                catch { /* ignore */ }
+            }
+
+            _taskNextRunCache[profile.Id] = next;
+        }
+
+        _taskNextRunCacheAt = now;
     }
 
     private void ReloadHistoryUi()
@@ -338,7 +475,7 @@ public partial class MainWindow : Window
 
     private void RefreshArchives()
     {
-        var profile = _vm.SelectedProfile;
+        var profile = _vm.SelectedProfile?.Profile;
         var selectedPath = _vm.SelectedArchive?.Path;
         _vm.Archives.Clear();
         if (profile is null || string.IsNullOrWhiteSpace(profile.BackupRoot))
@@ -398,6 +535,8 @@ public partial class MainWindow : Window
         _watcher.Watch(_app.Profiles);
         EnsureInAppScheduler();
         _inAppScheduler!.Start();
+        InvalidateTaskNextRunCache();
+        RefreshProfilesLive();
     }
 
     private void EnsureInAppScheduler()
@@ -435,6 +574,7 @@ public partial class MainWindow : Window
 
             ReloadHistoryUi();
             RefreshArchives();
+            RefreshProfilesLive();
             _vm.Status = result.Skipped
                 ? (result.StatusMessage ?? LocalizationService.Text("status.skipDefault"))
                 : result.Success
@@ -467,7 +607,7 @@ public partial class MainWindow : Window
     private async void EditProfile_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedProfile is null) return;
-        var dlg = new ProfileEditWindow(_vm.SelectedProfile) { Owner = this };
+        var dlg = new ProfileEditWindow(_vm.SelectedProfile.Profile) { Owner = this };
         if (dlg.ShowDialog() != true)
             return;
 
@@ -487,7 +627,7 @@ public partial class MainWindow : Window
     private async void DeleteProfile_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedProfile is null) return;
-        var p = _vm.SelectedProfile;
+        var p = _vm.SelectedProfile.Profile;
         if (MessageBox.Show(this, LocalizationService.Text("msg.deleteProfile", p.Name),
                 LocalizationService.Text("common.appName"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
@@ -514,6 +654,7 @@ public partial class MainWindow : Window
             _app = await _settings.LoadAsync();
             ReloadHistoryUi();
             RefreshArchives();
+            RefreshProfilesLive();
             _vm.Status = result.Skipped
                 ? (result.StatusMessage ?? LocalizationService.Text("status.skipDefault"))
                 : result.Success
@@ -648,7 +789,7 @@ public partial class MainWindow : Window
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedProfile is null) return;
-        var dir = PathHelper.GetProfileArchiveDirectory(_vm.SelectedProfile);
+        var dir = PathHelper.GetProfileArchiveDirectory(_vm.SelectedProfile.Profile);
         Directory.CreateDirectory(dir);
         Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
     }
@@ -715,6 +856,11 @@ public partial class MainWindow : Window
         if (_cleanedUp) return;
         _cleanedUp = true;
         AppLog.Default.Info("App", "Main window closing");
+        if (_profilesLiveTimer is not null)
+        {
+            _profilesLiveTimer.Stop();
+            _profilesLiveTimer = null;
+        }
         _inAppScheduler?.Dispose();
         _inAppScheduler = null;
         _watcher.Dispose();

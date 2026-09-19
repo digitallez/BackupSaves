@@ -22,7 +22,7 @@ public sealed class BackupResult
     {
         Success = true,
         Skipped = true,
-        FilesArchived = 0,
+        FilesArchived = fileCount,
         StatusMessage = LocalizationService.Text("core.skipUnchanged", fileCount)
     };
 

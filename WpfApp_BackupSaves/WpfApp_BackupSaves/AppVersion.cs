@@ -4,7 +4,7 @@ namespace WpfApp_BackupSaves;
 
 public static class AppVersion
 {
-    /// <summary>Display version, e.g. 1.0.3 or 1.0.3-debug</summary>
+    /// <summary>Display version, e.g. 1.0.3 or 1.0.3-debug-260919153012</summary>
     public static string Current { get; } = Resolve();
 
     /// <summary>Numeric core for comparisons, e.g. 1.0.3 (strips -debug).</summary>

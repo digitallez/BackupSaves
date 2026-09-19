@@ -26,6 +26,7 @@ public partial class ProfileEditWindow : Window
         ChecksumSkipBox.IsChecked = Profile.SkipUnchangedByChecksum;
         WatchProcessEnabled.IsChecked = Profile.WatchProcessEnabled;
         WatchProcessBox.Text = Profile.WatchProcessPattern ?? "";
+        WatchProcessScanBox.Text = (Profile.WatchProcessScanSeconds <= 0 ? 10 : Profile.WatchProcessScanSeconds).ToString();
         FormatBox.SelectedIndex = Profile.Format == ArchiveFormat.Zip ? 1 : 0;
         ScheduleEnabled.IsChecked = Profile.Schedule.Enabled;
         InAppScheduleEnabled.IsChecked = Profile.Schedule.InAppEnabled;
@@ -71,6 +72,7 @@ public partial class ProfileEditWindow : Window
         SkipUnchangedByChecksum = p.SkipUnchangedByChecksum,
         WatchProcessEnabled = p.WatchProcessEnabled,
         WatchProcessPattern = p.WatchProcessPattern,
+        WatchProcessScanSeconds = p.WatchProcessScanSeconds,
         WatchProcessWasRunning = p.WatchProcessWasRunning,
         Sources = p.Sources.Select(s => new SourceEntry { Path = s.Path, Type = s.Type }).ToList(),
         Schedule = new ScheduleConfig
@@ -193,13 +195,24 @@ public partial class ProfileEditWindow : Window
             return;
         }
 
+        if (!int.TryParse(WatchProcessScanBox.Text, out var scanSec) || scanSec < 1)
+        {
+            MessageBox.Show(this, LocalizationService.Text("profile.errProcessScanSec"),
+                LocalizationService.Text("common.appName"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         Profile.Name = NameBox.Text.Trim();
         Profile.Slug = PathHelper.ToSlug(Profile.Name);
         Profile.BackupRoot = RootBox.Text.Trim();
         Profile.RetentionCount = retention;
         Profile.SkipUnchangedByChecksum = ChecksumSkipBox.IsChecked == true;
         Profile.WatchProcessEnabled = watchEnabled;
+        ProcessWatchService.Invalidate(Profile.WatchProcessPattern);
         Profile.WatchProcessPattern = string.IsNullOrWhiteSpace(watchPattern) ? null : watchPattern;
+        Profile.WatchProcessScanSeconds = scanSec;
+        ProcessWatchService.Invalidate(Profile.WatchProcessPattern);
         if (Profile.WatchProcessEnabled && ProcessWatchService.IsMatchPatternConfigured(Profile.WatchProcessPattern))
         {
             Profile.WatchProcessWasRunning =

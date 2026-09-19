@@ -18,6 +18,9 @@ public sealed class BackupProfile
     /// <summary>Exe name, full path, or wildcard mask (e.g. game.exe, *elden*, C:\Games\*\game.exe).</summary>
     public string? WatchProcessPattern { get; set; }
 
+    /// <summary>How often the UI/in-app watch re-checks whether the process is running (seconds). Default 10.</summary>
+    public int WatchProcessScanSeconds { get; set; } = 10;
+
     /// <summary>Persisted: matching process was observed running on a previous check.</summary>
     public bool WatchProcessWasRunning { get; set; }
 

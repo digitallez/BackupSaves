@@ -9,6 +9,8 @@ public interface IWindowsTaskSchedulerService
     void Upsert(BackupProfile profile, string exePath);
     void Delete(BackupProfile profile);
     bool Exists(BackupProfile profile);
+    /// <summary>Next planned run from Task Scheduler (local), or null if unknown/disabled.</summary>
+    DateTimeOffset? GetNextRunTime(BackupProfile profile);
 }
 
 public sealed class WindowsTaskSchedulerService : IWindowsTaskSchedulerService
@@ -22,6 +24,30 @@ public sealed class WindowsTaskSchedulerService : IWindowsTaskSchedulerService
     {
         using var ts = new TaskService();
         return ts.GetTask(GetTaskName(profile)) is not null;
+    }
+
+    public DateTimeOffset? GetNextRunTime(BackupProfile profile)
+    {
+        if (!profile.Schedule.Enabled)
+            return null;
+
+        try
+        {
+            using var ts = new TaskService();
+            var task = ts.GetTask(GetTaskName(profile));
+            if (task is null)
+                return null;
+
+            var next = task.NextRunTime;
+            if (next <= DateTime.MinValue.AddYears(1) || next.Year < 2000)
+                return null;
+
+            return new DateTimeOffset(DateTime.SpecifyKind(next, DateTimeKind.Local));
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public void Delete(BackupProfile profile)

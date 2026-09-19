@@ -64,11 +64,13 @@ public sealed class InAppBackupScheduler : IDisposable
         try
         {
             var app = _getApp();
-            if (await ObserveWatchProcessesAsync(app))
+            var runningMap = await Task.Run(() => BuildRunningMap(app)).ConfigureAwait(true);
+
+            if (ObserveWatchProcesses(app, runningMap))
                 await _saveApp();
 
             var due = app.Profiles
-                .Where(IsDue)
+                .Where(p => IsDue(p, runningMap))
                 .OrderBy(p => p.Schedule.LastInAppBackupUtc ?? DateTimeOffset.MinValue)
                 .ToList();
 
@@ -77,7 +79,7 @@ public sealed class InAppBackupScheduler : IDisposable
                 if (_disposed) break;
 
                 var mins = Math.Max(1, profile.Schedule.IntervalMinutes ?? 60);
-                var farewell = IsFarewellDue(profile);
+                var farewell = IsFarewellDue(profile, runningMap);
                 AppLog.Default.Info("InAppSchedule",
                     $"Due: «{profile.Name}» interval={mins}m farewell={farewell} last={profile.Schedule.LastInAppBackupUtc:o}");
                 _setStatus(farewell
@@ -104,8 +106,45 @@ public sealed class InAppBackupScheduler : IDisposable
         }
     }
 
+    /// <summary>
+    /// One batched process evaluation per tick (PID cache + shared snapshot for wildcards).
+    /// Uses each profile's WatchProcessScanSeconds as the full-scan interval.
+    /// </summary>
+    private static IReadOnlyDictionary<string, bool> BuildRunningMap(AppSettings app)
+    {
+        var shortest = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var profile in app.Profiles)
+        {
+            if (!profile.WatchProcessEnabled
+                || !ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
+                continue;
+
+            var key = profile.WatchProcessPattern!.Trim();
+            var interval = TimeSpan.FromSeconds(
+                Math.Max(1, profile.WatchProcessScanSeconds <= 0 ? 10 : profile.WatchProcessScanSeconds));
+
+            if (!shortest.TryGetValue(key, out var existing) || interval < existing)
+                shortest[key] = interval;
+        }
+
+        if (shortest.Count == 0)
+            return new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        return ProcessWatchService.EvaluatePatterns(
+            shortest.Select(kv => (kv.Key, (TimeSpan?)kv.Value)));
+    }
+
+    private static bool LookupRunning(IReadOnlyDictionary<string, bool> map, string? pattern)
+    {
+        if (!ProcessWatchService.IsMatchPatternConfigured(pattern))
+            return false;
+
+        return map.TryGetValue(pattern!.Trim(), out var running) && running;
+    }
+
     /// <summary>Mark watched processes as running when first observed (needed for farewell backup).</summary>
-    private static Task<bool> ObserveWatchProcessesAsync(AppSettings app)
+    private static bool ObserveWatchProcesses(AppSettings app, IReadOnlyDictionary<string, bool> runningMap)
     {
         var changed = false;
         foreach (var profile in app.Profiles)
@@ -114,7 +153,7 @@ public sealed class InAppBackupScheduler : IDisposable
                 || !ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
                 continue;
 
-            var running = ProcessWatchService.IsAnyMatchingProcessRunning(profile.WatchProcessPattern);
+            var running = LookupRunning(runningMap, profile.WatchProcessPattern);
             if (running && !profile.WatchProcessWasRunning)
             {
                 profile.WatchProcessWasRunning = true;
@@ -124,10 +163,10 @@ public sealed class InAppBackupScheduler : IDisposable
             }
         }
 
-        return Task.FromResult(changed);
+        return changed;
     }
 
-    private static bool IsFarewellDue(BackupProfile profile)
+    private static bool IsFarewellDue(BackupProfile profile, IReadOnlyDictionary<string, bool> runningMap)
     {
         if (!profile.WatchProcessEnabled
             || !ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
@@ -136,10 +175,10 @@ public sealed class InAppBackupScheduler : IDisposable
         if (!profile.WatchProcessWasRunning)
             return false;
 
-        return !ProcessWatchService.IsAnyMatchingProcessRunning(profile.WatchProcessPattern);
+        return !LookupRunning(runningMap, profile.WatchProcessPattern);
     }
 
-    private static bool IsDue(BackupProfile profile)
+    private static bool IsDue(BackupProfile profile, IReadOnlyDictionary<string, bool> runningMap)
     {
         var s = profile.Schedule;
         if (s.Enabled || !s.InAppEnabled)
@@ -150,13 +189,13 @@ public sealed class InAppBackupScheduler : IDisposable
             return false;
 
         // Watched process just exited → backup once ASAP (ignore interval).
-        if (IsFarewellDue(profile))
+        if (IsFarewellDue(profile, runningMap))
             return true;
 
         // Watching enabled but process not running → no periodic backup.
         if (profile.WatchProcessEnabled
             && ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern)
-            && !ProcessWatchService.IsAnyMatchingProcessRunning(profile.WatchProcessPattern))
+            && !LookupRunning(runningMap, profile.WatchProcessPattern))
             return false;
 
         if (s.LastInAppBackupUtc is null)

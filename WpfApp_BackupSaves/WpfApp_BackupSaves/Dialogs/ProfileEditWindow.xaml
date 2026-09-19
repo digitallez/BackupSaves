@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:WpfApp_BackupSaves.Controls"
         xmlns:loc="clr-namespace:WpfApp_BackupSaves.Markup"
-        Title="{loc:Loc profile.title}" Height="660" Width="640"
+         Title="{loc:Loc profile.title}" Height="710" Width="640"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
         Icon="pack://application:,,,/Assets/app.ico"
         Background="{DynamicResource WindowBackgroundBrush}"
@@ -24,6 +24,7 @@
             <ColumnDefinition Width="*"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -168,12 +169,35 @@
             <TextBox x:Name="WatchProcessBox" Height="28" VerticalContentAlignment="Center"/>
           </DockPanel>
 
-          <CheckBox x:Name="ScheduleEnabled" Grid.Row="7" Grid.Column="1"
+          <StackPanel Grid.Row="7" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Loc profile.processScanSec}" VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.processScanSecTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+          <TextBox x:Name="WatchProcessScanBox" Grid.Row="7" Grid.Column="1" Margin="0,4"
+                   Width="110" Height="28" HorizontalAlignment="Left" Text="10"
+                   TextAlignment="Center" VerticalContentAlignment="Center"/>
+
+          <CheckBox x:Name="ScheduleEnabled" Grid.Row="8" Grid.Column="1"
                     Content="{loc:Loc profile.scheduleTask}" Margin="0,8,0,4"
                     VerticalAlignment="Center"
                     Checked="ScheduleMode_Changed" Unchecked="ScheduleMode_Changed"/>
 
-          <StackPanel Grid.Row="8" Grid.Column="1" Margin="0,0,0,4" Orientation="Horizontal">
+          <StackPanel Grid.Row="9" Grid.Column="1" Margin="0,0,0,4" Orientation="Horizontal">
             <CheckBox x:Name="InAppScheduleEnabled"
                       Content="{loc:Loc profile.inAppSchedule}"
                       VerticalAlignment="Center"
@@ -196,8 +220,8 @@
             </Border>
           </StackPanel>
 
-          <TextBlock Text="{loc:Loc profile.schedule}" Grid.Row="9" VerticalAlignment="Center"/>
-          <StackPanel Grid.Row="9" Grid.Column="1" Margin="0,4" Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="{loc:Loc profile.schedule}" Grid.Row="10" VerticalAlignment="Center"/>
+          <StackPanel Grid.Row="10" Grid.Column="1" Margin="0,4" Orientation="Horizontal" VerticalAlignment="Center">
             <ComboBox x:Name="ScheduleKindBox" Width="110" Height="28" SelectedIndex="0"
                       VerticalAlignment="Center">
               <ComboBoxItem Content="Daily" Tag="Daily"/>
@@ -215,16 +239,16 @@
                      VerticalAlignment="Center"/>
           </StackPanel>
 
-          <TextBlock Text="{loc:Loc profile.sources}" Grid.Row="10" Margin="0,12,0,4" FontWeight="SemiBold" Grid.ColumnSpan="2"/>
+          <TextBlock Text="{loc:Loc profile.sources}" Grid.Row="11" Margin="0,12,0,4" FontWeight="SemiBold" Grid.ColumnSpan="2"/>
 
-          <DockPanel Grid.Row="11" Grid.ColumnSpan="2" Margin="0,0,0,6">
+          <DockPanel Grid.Row="12" Grid.ColumnSpan="2" Margin="0,0,0,6">
             <Button DockPanel.Dock="Right" Content="{loc:Loc profile.addFile}" Width="80" Height="28" Margin="6,0,0,0" Click="AddFile_Click"/>
             <Button DockPanel.Dock="Right" Content="{loc:Loc profile.addFolder}" Width="80" Height="28" Click="AddFolder_Click"/>
             <Button DockPanel.Dock="Right" Content="{loc:Loc profile.remove}" Width="80" Height="28" Margin="0,0,6,0" Click="RemoveSource_Click"/>
             <TextBlock Text="{loc:Loc profile.sourcesHint}" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
           </DockPanel>
 
-          <ListBox x:Name="SourcesList" Grid.Row="12" Grid.ColumnSpan="2" MinHeight="140"
+          <ListBox x:Name="SourcesList" Grid.Row="13" Grid.ColumnSpan="2" MinHeight="140"
                    DisplayMemberPath="Path"/>
         </Grid>
       </ScrollViewer>

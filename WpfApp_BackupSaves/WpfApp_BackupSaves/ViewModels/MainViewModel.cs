@@ -17,6 +17,172 @@ public sealed class ArchiveListItem
         : $"{SizeBytes / (1024.0 * 1024):0.00} MB";
 }
 
+/// <summary>UI row for the profiles list: live process highlight + next-backup countdown.</summary>
+public sealed class ProfileListItem : INotifyPropertyChanged
+{
+    private BackupProfile _profile;
+    private bool _isWatchProcessRunning;
+    private string _nextBackupDisplay = "";
+
+    public ProfileListItem(BackupProfile profile) => _profile = profile;
+
+    public BackupProfile Profile => _profile;
+    public Guid Id => _profile.Id;
+    public string Name => _profile.Name;
+
+    public bool IsWatchProcessRunning
+    {
+        get => _isWatchProcessRunning;
+        private set
+        {
+            if (_isWatchProcessRunning == value) return;
+            _isWatchProcessRunning = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string NextBackupDisplay
+    {
+        get => _nextBackupDisplay;
+        private set
+        {
+            if (_nextBackupDisplay == value) return;
+            _nextBackupDisplay = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasNextBackupDisplay));
+        }
+    }
+
+    public bool HasNextBackupDisplay => !string.IsNullOrEmpty(_nextBackupDisplay);
+
+    public void Refresh(
+        BackupProfile profile,
+        DateTimeOffset now,
+        DateTimeOffset? taskNextRun,
+        bool? watchProcessRunning = null)
+    {
+        _profile = profile;
+        OnPropertyChanged(nameof(Profile));
+        OnPropertyChanged(nameof(Id));
+        OnPropertyChanged(nameof(Name));
+
+        var watchOn = profile.WatchProcessEnabled
+                      && ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern);
+        var running = watchProcessRunning
+                      ?? (watchOn
+                          && ProcessWatchService.IsAnyMatchingProcessRunning(profile.WatchProcessPattern));
+        if (!watchOn)
+            running = false;
+        IsWatchProcessRunning = running;
+
+        NextBackupDisplay = BuildNextBackupDisplay(profile, now, taskNextRun, watchOn, running);
+    }
+
+    private static string BuildNextBackupDisplay(
+        BackupProfile profile,
+        DateTimeOffset now,
+        DateTimeOffset? taskNextRun,
+        bool watchOn,
+        bool running)
+    {
+        var s = profile.Schedule;
+        var hasSchedule = s.Enabled || s.InAppEnabled;
+        if (!hasSchedule)
+            return "";
+
+        if (watchOn && !running)
+            return LocalizationService.Text("main.nextBackupWaiting");
+
+        if (s.Enabled)
+        {
+            if (s.Kind == ScheduleKind.OnLogon)
+                return LocalizationService.Text("main.nextBackupOnLogon");
+
+            if (taskNextRun is DateTimeOffset next && next > DateTimeOffset.MinValue)
+                return FormatCountdown(next - now);
+
+            var computed = ComputeNextTaskLocal(profile, now);
+            return computed is null ? "" : FormatCountdown(computed.Value - now);
+        }
+
+        // In-app interval while BackupSaves is open
+        var mins = Math.Max(1, s.IntervalMinutes ?? 0);
+        if ((s.IntervalMinutes ?? 0) < 1)
+            return "";
+
+        if (s.LastInAppBackupUtc is null)
+            return LocalizationService.Text("main.nextBackupDue");
+
+        var dueAt = s.LastInAppBackupUtc.Value.AddMinutes(mins);
+        return FormatCountdown(dueAt - now);
+    }
+
+    private static DateTimeOffset? ComputeNextTaskLocal(BackupProfile profile, DateTimeOffset now)
+    {
+        var s = profile.Schedule;
+        var local = now.ToLocalTime();
+        var tod = s.TimeOfDay ?? new TimeSpan(2, 0, 0);
+
+        switch (s.Kind)
+        {
+            case ScheduleKind.Daily:
+            {
+                var candidate = local.Date.Add(tod);
+                if (candidate <= local)
+                    candidate = candidate.AddDays(1);
+                return new DateTimeOffset(candidate);
+            }
+            case ScheduleKind.Weekly:
+            {
+                var days = s.DaysOfWeek.Count > 0
+                    ? s.DaysOfWeek
+                    : [DayOfWeek.Monday];
+                for (var i = 0; i < 8; i++)
+                {
+                    var day = local.Date.AddDays(i);
+                    if (!days.Contains(day.DayOfWeek))
+                        continue;
+                    var candidate = day.Add(tod);
+                    if (candidate > local)
+                        return new DateTimeOffset(candidate);
+                }
+
+                return null;
+            }
+            case ScheduleKind.Interval:
+            {
+                var mins = Math.Max(1, s.IntervalMinutes ?? 60);
+                return local.AddMinutes(mins);
+            }
+            default:
+                return null;
+        }
+    }
+
+    private static string FormatCountdown(TimeSpan remaining)
+    {
+        if (remaining <= TimeSpan.Zero)
+            return LocalizationService.Text("main.nextBackupDue");
+
+        string span;
+        if (remaining.TotalDays >= 1)
+            span = LocalizationService.Text("main.nextBackupSpanDh", (int)remaining.TotalDays, remaining.Hours);
+        else if (remaining.TotalHours >= 1)
+            span = LocalizationService.Text("main.nextBackupSpanHm", (int)remaining.TotalHours, remaining.Minutes);
+        else if (remaining.TotalMinutes >= 1)
+            span = LocalizationService.Text("main.nextBackupSpanMs", remaining.Minutes, remaining.Seconds);
+        else
+            span = LocalizationService.Text("main.nextBackupSpanS", Math.Max(1, remaining.Seconds));
+
+        return LocalizationService.Text("main.nextBackupIn", span);
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
 public sealed class LanguageOption
 {
     public string Id { get; init; } = "";
@@ -30,7 +196,7 @@ public sealed class LanguageOption
 
 public sealed class MainViewModel : INotifyPropertyChanged
 {
-    public ObservableCollection<BackupProfile> Profiles { get; } = [];
+    public ObservableCollection<ProfileListItem> Profiles { get; } = [];
     public ObservableCollection<ArchiveListItem> Archives { get; } = [];
     public ObservableCollection<RunHistoryEntry> History { get; } = [];
     public ObservableCollection<LanguageOption> Languages { get; } = [];
@@ -107,8 +273,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    private BackupProfile? _selectedProfile;
-    public BackupProfile? SelectedProfile
+    private ProfileListItem? _selectedProfile;
+    public ProfileListItem? SelectedProfile
     {
         get => _selectedProfile;
         set

@@ -22,7 +22,7 @@
     <Product>BackupSaves</Product>
   </PropertyGroup>
 
-  <!-- Debug: same base number, no bump, visible -debug marker -->
+    <!-- Debug: same base number, -debug + build stamp yyMMddHHmmss (set in StampDebugVersion) -->
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <InformationalVersion>$(VersionMajor).$(VersionMinor).$(VersionPatch)-debug</InformationalVersion>
   </PropertyGroup>
@@ -44,6 +44,17 @@
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Debug: stamp InformationalVersion with build time (yyMMddHHmmss) on every build -->
+  <Target Name="StampDebugVersion"
+          BeforeTargets="GenerateAssemblyInfo;CoreGenerateAssemblyInfo;BeforeBuild"
+          Condition="'$(Configuration)' == 'Debug' AND '$(DesignTimeBuild)' != 'true' AND !$(MSBuildProjectName.Contains('wpftmp'))">
+    <PropertyGroup>
+      <_BuildStamp>$([System.DateTime]::Now.ToString("yyMMddHHmmss"))</_BuildStamp>
+      <InformationalVersion>$(VersionMajor).$(VersionMinor).$(VersionPatch)-debug-$(_BuildStamp)</InformationalVersion>
+    </PropertyGroup>
+    <Message Importance="high" Text="BackupSaves Debug version → $(InformationalVersion)" />
+  </Target>
 
   <!-- Bump patch only on Release builds (skip Debug, design-time, WPF _wpftmp) -->
   <Target Name="IncrementVersionPatch"
