@@ -51,9 +51,24 @@
           <Button Content="{loc:Loc main.edit}" Width="84" Height="30" Margin="0,0,6,0" Click="EditProfile_Click" IsEnabled="{Binding HasProfile}"/>
           <Button Content="{loc:Loc main.delete}" Width="84" Height="30" Click="DeleteProfile_Click" IsEnabled="{Binding HasProfile}"/>
         </StackPanel>
-        <ListBox ItemsSource="{Binding Profiles}"
+        <ListBox x:Name="ProfilesList"
+                 ItemsSource="{Binding Profiles}"
                  SelectedItem="{Binding SelectedProfile}"
-                 SelectionChanged="Profiles_SelectionChanged">
+                 SelectionChanged="Profiles_SelectionChanged"
+                 PreviewMouseRightButtonDown="ProfilesList_PreviewMouseRightButtonDown">
+          <ListBox.ContextMenu>
+            <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+              <MenuItem Header="{loc:Loc main.add}" Click="AddProfile_Click"
+                        IsEnabled="{Binding CanInteract}"/>
+              <MenuItem Header="{loc:Loc main.edit}" Click="EditProfile_Click"
+                        IsEnabled="{Binding HasProfile}"/>
+              <MenuItem Header="{loc:Loc main.delete}" Click="DeleteProfile_Click"
+                        IsEnabled="{Binding HasProfile}"/>
+              <Separator/>
+              <MenuItem Header="{loc:Loc main.filterHistory}" Click="FilterHistoryByProfile_Click"
+                        IsEnabled="{Binding HasProfile}"/>
+            </ContextMenu>
+          </ListBox.ContextMenu>
           <ListBox.ItemTemplate>
             <DataTemplate>
               <Border BorderThickness="3,0,0,0" Padding="6,2,0,2">
@@ -103,10 +118,130 @@
           <Button Content="{loc:Loc main.openFolder}" Width="110" Height="30"
                   Click="OpenFolder_Click" IsEnabled="{Binding HasProfile}"/>
         </StackPanel>
+        <Border DockPanel.Dock="Bottom" Margin="0,8,0,0" Padding="10,8"
+                Background="{DynamicResource PanelBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderBrushKey}" BorderThickness="1"
+                Height="210">
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Visibility" Value="Collapsed"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding HasArchive}" Value="True">
+                  <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid DataContext="{Binding SelectedArchive}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc archive.displayName}"
+                         VerticalAlignment="Center" Margin="0,0,10,4"
+                         Foreground="{DynamicResource SecondaryTextBrush}"/>
+              <TextBox x:Name="ArchiveDisplayNameBox"
+                       Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Padding="4,2"
+                       Text="{Binding DisplayName, UpdateSourceTrigger=Explicit}"
+                       GotFocus="ArchiveDisplayName_GotFocus"
+                       LostFocus="ArchiveDisplayName_LostFocus"/>
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Loc archive.fileName}"
+                         VerticalAlignment="Center" Margin="0,0,10,4"
+                         Foreground="{DynamicResource SecondaryTextBrush}"/>
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Name}"
+                         TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
+                         ToolTip="{Binding Name}"/>
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Loc archive.date}"
+                         VerticalAlignment="Center" Margin="0,0,10,4"
+                         Foreground="{DynamicResource SecondaryTextBrush}"/>
+              <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,0,0,4"
+                         Text="{Binding LastWriteTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}"/>
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Loc archive.size}"
+                         VerticalAlignment="Center" Margin="0,0,10,4"
+                         Foreground="{DynamicResource SecondaryTextBrush}"/>
+              <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SizeDisplay}" Margin="0,0,0,4"/>
+              <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Loc archive.path}"
+                         VerticalAlignment="Center" Margin="0,0,10,4"
+                         Foreground="{DynamicResource SecondaryTextBrush}"/>
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Path}"
+                         TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
+                         ToolTip="{Binding Path}"/>
+              <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Loc archive.format}"
+                         VerticalAlignment="Center" Margin="0,0,10,4"
+                         Foreground="{DynamicResource SecondaryTextBrush}"/>
+              <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding FormatDisplay}" Margin="0,0,0,4"/>
+              <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Loc archive.created}"
+                         VerticalAlignment="Center" Margin="0,0,10,4"
+                         Foreground="{DynamicResource SecondaryTextBrush}">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding HasCreatedDisplay}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+              <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding CreatedDisplay}" Margin="0,0,0,4">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding HasCreatedDisplay}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+              <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:Loc archive.profile}"
+                         VerticalAlignment="Center" Margin="0,0,10,0"
+                         Foreground="{DynamicResource SecondaryTextBrush}">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding HasManifestProfileName}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+              <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding ManifestProfileName}"
+                         TextTrimming="CharacterEllipsis">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding HasManifestProfileName}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+            </Grid>
+          </ScrollViewer>
+        </Border>
         <ListBox x:Name="ArchivesList"
                  ItemsSource="{Binding Archives}" SelectedItem="{Binding SelectedArchive}"
                  HorizontalContentAlignment="Stretch"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 SelectionChanged="ArchivesList_SelectionChanged"
                  PreviewMouseRightButtonDown="ArchivesList_PreviewMouseRightButtonDown">
           <ListBox.ContextMenu>
             <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
@@ -160,6 +295,7 @@
                     <Image.Style>
                       <Style TargetType="Image">
                         <Setter Property="Visibility" Value="Collapsed"/>
+                        <Setter Property="Source" Value="{x:Null}"/>
                         <Setter Property="Margin" Value="0"/>
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding HasFlag}" Value="True">
@@ -177,12 +313,45 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
+          <Button DockPanel.Dock="Right" Margin="0,0,8,0" Padding="6,0" Height="22" FontSize="11"
+                  Content="{loc:Loc main.clearHistoryFilter}"
+                  Click="ClearHistoryFilter_Click"
+                  ToolTip="{loc:Loc main.clearHistoryFilterTooltip}"
+                  VerticalAlignment="Center">
+            <Button.Style>
+              <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Visibility" Value="Collapsed"/>
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding HasHistoryFilter}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Button.Style>
+          </Button>
           <TextBlock Text="{loc:Loc main.history}" FontSize="16" FontWeight="SemiBold"
                      VerticalAlignment="Center"/>
         </DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding HistoryFilterDisplay}" FontSize="11"
+                   Foreground="{DynamicResource SecondaryTextBrush}"
+                   TextTrimming="CharacterEllipsis" Margin="0,0,0,8"
+                   ToolTip="{Binding HistoryFilterDisplay}">
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Setter Property="Visibility" Value="Collapsed"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding HasHistoryFilter}" Value="True">
+                  <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
         <Button DockPanel.Dock="Bottom" Content="{loc:Loc main.exit}" Height="30" Margin="0,8,0,0"
                 Click="ForceExit_Click" ToolTip="{loc:Loc main.exitTooltip}"/>
-        <ListBox ItemsSource="{Binding History}">
+        <ListBox x:Name="HistoryList"
+                 ItemsSource="{Binding History}"
+                 SelectionChanged="HistoryList_SelectionChanged">
           <ListBox.Resources>
             <DataTemplate DataType="{x:Type models:RunHistoryEntry}">
               <StackPanel Margin="0,2">

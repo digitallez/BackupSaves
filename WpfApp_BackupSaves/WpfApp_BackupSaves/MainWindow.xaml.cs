@@ -31,6 +31,9 @@ public partial class MainWindow : Window
     private AppSettings _app = new();
     private bool _historyFullyLoaded;
     private int _historyHiddenCount;
+    private int _archiveDetailLoadToken;
+    private bool _suppressHistorySelection;
+    private bool _editingArchiveDisplayName;
     private readonly IUpdateChecker _updateChecker = new GitHubReleaseUpdateChecker();
     private InAppBackupScheduler? _inAppScheduler;
     private DispatcherTimer? _profilesLiveTimer;
@@ -60,6 +63,7 @@ public partial class MainWindow : Window
                 UpdateThemeToggleCaption();
                 RefreshProfilesLive();
                 RefreshHistoryLoadMoreCaption();
+                UpdateHistoryFilterDisplay();
             });
         };
         Loaded += async (_, _) => await LoadAsync();
@@ -467,35 +471,63 @@ public partial class MainWindow : Window
         if (loadAll)
             _historyFullyLoaded = true;
 
-        var take = _historyFullyLoaded
-            ? all.Count
-            : Math.Min(HistoryStore.UiInitialCount, all.Count);
+        var filterId = _vm.HistoryFilterProfileId;
+        IReadOnlyList<RunHistoryEntry> filtered = filterId is Guid fid
+            ? all.Where(h => h.ProfileId == fid).ToList()
+            : all;
 
-        _vm.History.Clear();
-        for (var i = 0; i < take; i++)
+        var take = _historyFullyLoaded
+            ? filtered.Count
+            : Math.Min(HistoryStore.UiInitialCount, filtered.Count);
+
+        _suppressHistorySelection = true;
+        try
         {
-            var h = all[i];
-            if (string.IsNullOrWhiteSpace(h.ProfileName))
+            _vm.History.Clear();
+            for (var i = 0; i < take; i++)
             {
-                h.ProfileName = _app.Profiles.FirstOrDefault(p => p.Id == h.ProfileId)?.Name
-                               ?? LocalizationService.Text("history.profileDeleted");
+                var h = filtered[i];
+                if (string.IsNullOrWhiteSpace(h.ProfileName))
+                {
+                    h.ProfileName = _app.Profiles.FirstOrDefault(p => p.Id == h.ProfileId)?.Name
+                                   ?? LocalizationService.Text("history.profileDeleted");
+                }
+
+                _vm.History.Add(h);
             }
 
-            _vm.History.Add(h);
+            if (!_historyFullyLoaded && filtered.Count > take)
+            {
+                _historyHiddenCount = filtered.Count - take;
+                _vm.History.Add(new HistoryLoadMoreItem
+                {
+                    Caption = LocalizationService.Text("history.loadAll", _historyHiddenCount)
+                });
+            }
+            else
+            {
+                _historyHiddenCount = 0;
+            }
+        }
+        finally
+        {
+            _suppressHistorySelection = false;
         }
 
-        if (!_historyFullyLoaded && all.Count > take)
+        UpdateHistoryFilterDisplay();
+    }
+
+    private void UpdateHistoryFilterDisplay()
+    {
+        if (_vm.HistoryFilterProfileId is not Guid id)
         {
-            _historyHiddenCount = all.Count - take;
-            _vm.History.Add(new HistoryLoadMoreItem
-            {
-                Caption = LocalizationService.Text("history.loadAll", _historyHiddenCount)
-            });
+            _vm.HistoryFilterDisplay = "";
+            return;
         }
-        else
-        {
-            _historyHiddenCount = 0;
-        }
+
+        var name = _app.Profiles.FirstOrDefault(p => p.Id == id)?.Name
+                   ?? LocalizationService.Text("history.profileDeleted");
+        _vm.HistoryFilterDisplay = LocalizationService.Text("main.historyFilterActive", name);
     }
 
     private void RefreshHistoryLoadMoreCaption()
@@ -524,17 +556,33 @@ public partial class MainWindow : Window
 
     private void RefreshArchives()
     {
-        var profile = _vm.SelectedProfile?.Profile;
-        var selectedPath = _vm.SelectedArchive?.Path;
-        _vm.Archives.Clear();
-        if (profile is null || string.IsNullOrWhiteSpace(profile.BackupRoot))
+        // Don't rebuild the list while the user is typing an archive title —
+        // clearing SelectedArchive would reset the TextBox mid-edit.
+        if (_editingArchiveDisplayName)
             return;
+
+        var profile = _vm.SelectedProfile?.Profile;
+        var previousSelected = _vm.SelectedArchive;
+        var selectedPath = previousSelected?.Path;
+
+        if (profile is null || string.IsNullOrWhiteSpace(profile.BackupRoot))
+        {
+            if (_vm.Archives.Count > 0)
+                _vm.Archives.Clear();
+            _vm.SelectedArchive = null;
+            return;
+        }
 
         var dir = PathHelper.GetProfileArchiveDirectory(profile);
         if (!Directory.Exists(dir))
+        {
+            if (_vm.Archives.Count > 0)
+                _vm.Archives.Clear();
+            _vm.SelectedArchive = null;
             return;
+        }
 
-        var items = Directory.EnumerateFiles(dir)
+        var disk = Directory.EnumerateFiles(dir)
             .Where(f =>
             {
                 var n = f.ToLowerInvariant();
@@ -542,20 +590,106 @@ public partial class MainWindow : Window
             })
             .Select(f => new FileInfo(f))
             .OrderByDescending(f => f.LastWriteTimeUtc)
-            .Select(f => new ArchiveListItem
+            .ToList();
+
+        // Fast path: same files in same order — keep instances (no Clear → no layout flicker).
+        if (disk.Count == _vm.Archives.Count
+            && disk.Select(f => f.FullName)
+                .SequenceEqual(_vm.Archives.Select(a => a.Path), StringComparer.OrdinalIgnoreCase))
+        {
+            if (_vm.SelectedArchive is null && _vm.Archives.Count > 0)
+            {
+                _vm.SelectedArchive = selectedPath is not null
+                    ? _vm.Archives.FirstOrDefault(a =>
+                          string.Equals(a.Path, selectedPath, StringComparison.OrdinalIgnoreCase))
+                      ?? _vm.Archives[0]
+                    : _vm.Archives[0];
+            }
+
+            return;
+        }
+
+        var existing = _vm.Archives.ToDictionary(a => a.Path, StringComparer.OrdinalIgnoreCase);
+        var next = new List<ArchiveListItem>(disk.Count);
+        foreach (var f in disk)
+        {
+            if (existing.TryGetValue(f.FullName, out var item))
+            {
+                next.Add(item);
+                continue;
+            }
+
+            var created = new ArchiveListItem
             {
                 Path = f.FullName,
                 Name = f.Name,
                 LastWriteTime = f.LastWriteTime,
-                SizeBytes = f.Length
-            });
+                SizeBytes = f.Length,
+                FormatDisplay = f.Extension.TrimStart('.').ToUpperInvariant()
+            };
+            created.DisplayName = ArchiveMetaStore.LoadDisplayName(f.FullName) ?? "";
+            next.Add(created);
+        }
 
-        foreach (var item in items)
-            _vm.Archives.Add(item);
+        ApplyArchiveList(next);
 
-        _vm.SelectedArchive = selectedPath is not null
-            ? _vm.Archives.FirstOrDefault(a => a.Path == selectedPath)
-            : _vm.Archives.FirstOrDefault();
+        if (previousSelected is not null
+            && next.Any(a => ReferenceEquals(a, previousSelected)))
+        {
+            if (!ReferenceEquals(_vm.SelectedArchive, previousSelected))
+                _vm.SelectedArchive = previousSelected;
+            return;
+        }
+
+        var toSelect = selectedPath is not null
+            ? next.FirstOrDefault(a =>
+                  string.Equals(a.Path, selectedPath, StringComparison.OrdinalIgnoreCase))
+            : next.FirstOrDefault();
+
+        if (!ReferenceEquals(_vm.SelectedArchive, toSelect))
+        {
+            _vm.SelectedArchive = toSelect;
+            _ = LoadSelectedArchiveDetailsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Sync Archives to <paramref name="next"/> with Move/Insert/Remove only.
+    /// Avoids Clear(), which briefly nulls selection and collapses the detail panel (layout flicker).
+    /// </summary>
+    private void ApplyArchiveList(List<ArchiveListItem> next)
+    {
+        for (var i = _vm.Archives.Count - 1; i >= 0; i--)
+        {
+            var path = _vm.Archives[i].Path;
+            if (!next.Any(n => string.Equals(n.Path, path, StringComparison.OrdinalIgnoreCase)))
+                _vm.Archives.RemoveAt(i);
+        }
+
+        for (var i = 0; i < next.Count; i++)
+        {
+            var want = next[i];
+            if (i < _vm.Archives.Count
+                && string.Equals(_vm.Archives[i].Path, want.Path, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var found = -1;
+            for (var j = i; j < _vm.Archives.Count; j++)
+            {
+                if (!string.Equals(_vm.Archives[j].Path, want.Path, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                found = j;
+                break;
+            }
+
+            if (found >= 0)
+                _vm.Archives.Move(found, i);
+            else
+                _vm.Archives.Insert(i, want);
+        }
+
+        while (_vm.Archives.Count > next.Count)
+            _vm.Archives.RemoveAt(_vm.Archives.Count - 1);
     }
 
     private async Task PersistAndSyncSchedulerAsync(BackupProfile? changed = null)
@@ -776,6 +910,153 @@ public partial class MainWindow : Window
             item.IsSelected = true;
     }
 
+    private void ProfilesList_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var dep = e.OriginalSource as DependencyObject;
+        while (dep is not null && dep is not System.Windows.Controls.ListBoxItem)
+            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+
+        if (dep is System.Windows.Controls.ListBoxItem item)
+            item.IsSelected = true;
+    }
+
+    private void ArchivesList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        _ = LoadSelectedArchiveDetailsAsync();
+    }
+
+    private async Task LoadSelectedArchiveDetailsAsync()
+    {
+        var archive = _vm.SelectedArchive;
+        if (archive is null)
+            return;
+
+        var token = ++_archiveDetailLoadToken;
+        var path = archive.Path;
+
+        // Clear manifest fields immediately so we don't flash previous archive's data.
+        archive.ManifestProfileName = "";
+        archive.CreatedDisplay = "";
+
+        try
+        {
+            var manifest = await _restore.ReadManifestAsync(path);
+            if (token != _archiveDetailLoadToken || !ReferenceEquals(_vm.SelectedArchive, archive))
+                return;
+
+            if (manifest is null)
+            {
+                if (string.IsNullOrWhiteSpace(archive.FormatDisplay))
+                    archive.FormatDisplay = System.IO.Path.GetExtension(path).TrimStart('.').ToUpperInvariant();
+                return;
+            }
+
+            archive.ManifestProfileName = manifest.ProfileName ?? "";
+            archive.CreatedDisplay = manifest.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+            archive.FormatDisplay = manifest.Format.ToString().ToUpperInvariant();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", $"Failed to read archive details: \"{path}\"", ex);
+            if (token == _archiveDetailLoadToken && ReferenceEquals(_vm.SelectedArchive, archive))
+            {
+                archive.ManifestProfileName = "";
+                archive.CreatedDisplay = "";
+            }
+        }
+    }
+
+    private void ArchiveDisplayName_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _editingArchiveDisplayName = true;
+    }
+
+    private void ArchiveDisplayName_LostFocus(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_vm.SelectedArchive is null)
+                return;
+
+            var archive = _vm.SelectedArchive;
+            // LostFocus often runs before binding source update — take text from the box.
+            if (sender is System.Windows.Controls.TextBox tb)
+            {
+                tb.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+                archive.DisplayName = tb.Text ?? "";
+            }
+
+            ArchiveMetaStore.SaveDisplayName(archive.Path, archive.DisplayName);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Failed to save archive display name", ex);
+            MessageBox.Show(this, LocalizationService.Text("msg.saveArchiveNameFailed", ex.Message),
+                LocalizationService.Text("msg.archivesTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _editingArchiveDisplayName = false;
+        }
+    }
+
+    private async void FilterHistoryByProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedProfile is null) return;
+        _vm.HistoryFilterProfileId = _vm.SelectedProfile.Id;
+        _historyFullyLoaded = false;
+        await ReloadHistoryUiAsync();
+    }
+
+    private async void ClearHistoryFilter_Click(object sender, RoutedEventArgs e)
+    {
+        _vm.HistoryFilterProfileId = null;
+        _historyFullyLoaded = false;
+        await ReloadHistoryUiAsync();
+    }
+
+    private void HistoryList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_suppressHistorySelection) return;
+        if (HistoryList.SelectedItem is not RunHistoryEntry entry)
+            return;
+
+        NavigateToHistoryArchive(entry);
+    }
+
+    private void NavigateToHistoryArchive(RunHistoryEntry entry)
+    {
+        if (_editingArchiveDisplayName)
+            return;
+
+        var profileItem = _vm.Profiles.FirstOrDefault(p => p.Id == entry.ProfileId);
+        if (profileItem is not null && !ReferenceEquals(_vm.SelectedProfile, profileItem))
+            _vm.SelectedProfile = profileItem;
+
+        if (string.IsNullOrWhiteSpace(entry.ArchivePath))
+            return;
+
+        var match = FindArchiveByPath(entry.ArchivePath);
+        if (match is null)
+        {
+            RefreshArchives();
+            match = FindArchiveByPath(entry.ArchivePath);
+        }
+
+        if (match is not null && !ReferenceEquals(_vm.SelectedArchive, match))
+            _vm.SelectedArchive = match;
+    }
+
+    private ArchiveListItem? FindArchiveByPath(string archivePath)
+    {
+        return _vm.Archives.FirstOrDefault(a =>
+                   string.Equals(a.Path, archivePath, StringComparison.OrdinalIgnoreCase))
+               ?? _vm.Archives.FirstOrDefault(a =>
+                   string.Equals(a.Name, System.IO.Path.GetFileName(archivePath),
+                       StringComparison.OrdinalIgnoreCase));
+    }
+
     private void ArchiveRevealInExplorer_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedArchive is null) return;
@@ -822,6 +1103,7 @@ public partial class MainWindow : Window
         {
             if (File.Exists(path))
                 File.Delete(path);
+            ArchiveMetaStore.DeleteForArchive(path);
             AppLog.Default.Info("App", $"Archive deleted: \"{path}\"");
             _vm.Status = LocalizationService.Text("status.deleted", name);
             RefreshArchives();

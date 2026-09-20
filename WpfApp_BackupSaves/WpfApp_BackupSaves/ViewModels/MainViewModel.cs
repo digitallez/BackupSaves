@@ -6,8 +6,13 @@ using BackupSaves.Core.Services;
 
 namespace WpfApp_BackupSaves.ViewModels;
 
-public sealed class ArchiveListItem
+public sealed class ArchiveListItem : INotifyPropertyChanged
 {
+    private string _displayName = "";
+    private string _manifestProfileName = "";
+    private string _createdDisplay = "";
+    private string _formatDisplay = "";
+
     public string Path { get; init; } = "";
     public string Name { get; init; } = "";
     public DateTime LastWriteTime { get; init; }
@@ -15,6 +20,63 @@ public sealed class ArchiveListItem
     public string SizeDisplay => SizeBytes < 1024 * 1024
         ? $"{SizeBytes / 1024.0:0.0} KB"
         : $"{SizeBytes / (1024.0 * 1024):0.00} MB";
+
+    /// <summary>User-editable title; empty means fall back to file name.</summary>
+    public string DisplayName
+    {
+        get => _displayName;
+        set
+        {
+            var v = value ?? "";
+            if (_displayName == v) return;
+            _displayName = v;
+            OnPropertyChanged();
+        }
+    }
+
+    public string ManifestProfileName
+    {
+        get => _manifestProfileName;
+        set
+        {
+            if (_manifestProfileName == value) return;
+            _manifestProfileName = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasManifestProfileName));
+        }
+    }
+
+    public bool HasManifestProfileName => !string.IsNullOrWhiteSpace(_manifestProfileName);
+
+    public string CreatedDisplay
+    {
+        get => _createdDisplay;
+        set
+        {
+            if (_createdDisplay == value) return;
+            _createdDisplay = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasCreatedDisplay));
+        }
+    }
+
+    public bool HasCreatedDisplay => !string.IsNullOrWhiteSpace(_createdDisplay);
+
+    public string FormatDisplay
+    {
+        get => _formatDisplay;
+        set
+        {
+            if (_formatDisplay == value) return;
+            _formatDisplay = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 /// <summary>UI row for the profiles list: live process highlight + next-backup countdown.</summary>
@@ -334,6 +396,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool HasProfile => SelectedProfile is not null;
     public bool HasArchive => SelectedArchive is not null;
     public bool CanInteract => !IsBusy;
+
+    private Guid? _historyFilterProfileId;
+    public Guid? HistoryFilterProfileId
+    {
+        get => _historyFilterProfileId;
+        set
+        {
+            if (Set(ref _historyFilterProfileId, value))
+            {
+                OnPropertyChanged(nameof(HasHistoryFilter));
+                OnPropertyChanged(nameof(HistoryFilterDisplay));
+            }
+        }
+    }
+
+    public bool HasHistoryFilter => HistoryFilterProfileId is not null;
+
+    private string _historyFilterDisplay = "";
+    public string HistoryFilterDisplay
+    {
+        get => _historyFilterDisplay;
+        set => Set(ref _historyFilterDisplay, value);
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

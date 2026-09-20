@@ -29,6 +29,7 @@ public sealed class RetentionService : IRetentionService
         {
             try
             {
+                ArchiveMetaStore.DeleteForArchive(old.FullName);
                 old.Delete();
                 deleted++;
             }
