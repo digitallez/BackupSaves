@@ -934,10 +934,6 @@ public partial class MainWindow : Window
         var token = ++_archiveDetailLoadToken;
         var path = archive.Path;
 
-        // Clear manifest fields immediately so we don't flash previous archive's data.
-        archive.ManifestProfileName = "";
-        archive.CreatedDisplay = "";
-
         try
         {
             var manifest = await _restore.ReadManifestAsync(path);
@@ -946,6 +942,8 @@ public partial class MainWindow : Window
 
             if (manifest is null)
             {
+                archive.ManifestProfileName = "";
+                archive.CreatedDisplay = "";
                 if (string.IsNullOrWhiteSpace(archive.FormatDisplay))
                     archive.FormatDisplay = System.IO.Path.GetExtension(path).TrimStart('.').ToUpperInvariant();
                 return;

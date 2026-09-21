@@ -31,8 +31,13 @@ public sealed class ArchiveListItem : INotifyPropertyChanged
             if (_displayName == v) return;
             _displayName = v;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(ListTitle));
         }
     }
+
+    /// <summary>List label: custom display name if set, otherwise file name.</summary>
+    public string ListTitle =>
+        string.IsNullOrWhiteSpace(_displayName) ? Name : _displayName.Trim();
 
     public string ManifestProfileName
     {
@@ -357,7 +362,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _selectedArchive;
         set
         {
-            if (Set(ref _selectedArchive, value))
+            var had = _selectedArchive is not null;
+            if (!Set(ref _selectedArchive, value))
+                return;
+            // Only notify when presence flips — spurious HasArchive raises
+            // re-run the detail Border Visibility DataTrigger (Collapsed↔Visible blink).
+            if (had != (value is not null))
                 OnPropertyChanged(nameof(HasArchive));
         }
     }

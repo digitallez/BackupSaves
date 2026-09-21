@@ -262,8 +262,8 @@
                   <ColumnDefinition Width="140"/>
                   <ColumnDefinition Width="72"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="0" Text="{Binding ListTitle}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" ToolTip="{Binding Name}"/>
                 <TextBlock Grid.Column="1" Text="{Binding LastWriteTime, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
                            VerticalAlignment="Center" Margin="8,0,0,0"
                            Foreground="{DynamicResource SecondaryTextBrush}"/>
