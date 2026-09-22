@@ -1132,12 +1132,20 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RestoreFromTray()
+    /// <summary>Show window (incl. from tray) and bring to foreground — also used by single-instance activation.</summary>
+    internal void BringToForeground()
     {
         Show();
-        WindowState = WindowState.Normal;
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
         Activate();
+        // Briefly topmost so Windows grants focus when another process launched us.
+        Topmost = true;
+        Topmost = false;
+        Focus();
     }
+
+    private void RestoreFromTray() => BringToForeground();
 
     private void ForceExit_Click(object sender, RoutedEventArgs e)
     {
