@@ -121,7 +121,8 @@
         <Border DockPanel.Dock="Bottom" Margin="0,8,0,0" Padding="10,8"
                 Background="{DynamicResource PanelBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrushKey}" BorderThickness="1"
-                Height="210">
+                Height="210"
+                CacheMode="BitmapCache">
           <Border.Style>
             <Style TargetType="Border">
               <Setter Property="Visibility" Value="Collapsed"/>
@@ -133,7 +134,8 @@
             </Style>
           </Border.Style>
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <Grid DataContext="{Binding SelectedArchive}">
+            <!-- Bind via SelectedArchive.* — do not swap Grid.DataContext (causes full rebind flash). -->
+            <Grid>
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -153,87 +155,43 @@
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
               <TextBox x:Name="ArchiveDisplayNameBox"
                        Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Padding="4,2"
-                       Text="{Binding DisplayName, UpdateSourceTrigger=Explicit}"
+                       Text="{Binding SelectedArchive.DisplayName, UpdateSourceTrigger=Explicit}"
                        GotFocus="ArchiveDisplayName_GotFocus"
                        LostFocus="ArchiveDisplayName_LostFocus"/>
               <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Loc archive.fileName}"
                          VerticalAlignment="Center" Margin="0,0,10,4"
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
-              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Name}"
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedArchive.Name}"
                          TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
-                         ToolTip="{Binding Name}"/>
+                         ToolTip="{Binding SelectedArchive.Name}"/>
               <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Loc archive.date}"
                          VerticalAlignment="Center" Margin="0,0,10,4"
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
               <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,0,0,4"
-                         Text="{Binding LastWriteTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}"/>
+                         Text="{Binding SelectedArchive.LastWriteTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}"/>
               <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Loc archive.size}"
                          VerticalAlignment="Center" Margin="0,0,10,4"
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
-              <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SizeDisplay}" Margin="0,0,0,4"/>
+              <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedArchive.SizeDisplay}" Margin="0,0,0,4"/>
               <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Loc archive.path}"
                          VerticalAlignment="Center" Margin="0,0,10,4"
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
-              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Path}"
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedArchive.Path}"
                          TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
-                         ToolTip="{Binding Path}"/>
+                         ToolTip="{Binding SelectedArchive.Path}"/>
               <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Loc archive.format}"
                          VerticalAlignment="Center" Margin="0,0,10,4"
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
-              <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding FormatDisplay}" Margin="0,0,0,4"/>
+              <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedArchive.FormatDisplay}" Margin="0,0,0,4"/>
               <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Loc archive.created}"
                          VerticalAlignment="Center" Margin="0,0,10,4"
-                         Foreground="{DynamicResource SecondaryTextBrush}">
-                <TextBlock.Style>
-                  <Style TargetType="TextBlock">
-                    <Setter Property="Visibility" Value="Collapsed"/>
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding HasCreatedDisplay}" Value="True">
-                        <Setter Property="Visibility" Value="Visible"/>
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBlock.Style>
-              </TextBlock>
-              <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding CreatedDisplay}" Margin="0,0,0,4">
-                <TextBlock.Style>
-                  <Style TargetType="TextBlock">
-                    <Setter Property="Visibility" Value="Collapsed"/>
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding HasCreatedDisplay}" Value="True">
-                        <Setter Property="Visibility" Value="Visible"/>
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBlock.Style>
-              </TextBlock>
+                         Foreground="{DynamicResource SecondaryTextBrush}"/>
+              <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedArchive.CreatedDisplay}" Margin="0,0,0,4"/>
               <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:Loc archive.profile}"
                          VerticalAlignment="Center" Margin="0,0,10,0"
-                         Foreground="{DynamicResource SecondaryTextBrush}">
-                <TextBlock.Style>
-                  <Style TargetType="TextBlock">
-                    <Setter Property="Visibility" Value="Collapsed"/>
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding HasManifestProfileName}" Value="True">
-                        <Setter Property="Visibility" Value="Visible"/>
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBlock.Style>
-              </TextBlock>
-              <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding ManifestProfileName}"
-                         TextTrimming="CharacterEllipsis">
-                <TextBlock.Style>
-                  <Style TargetType="TextBlock">
-                    <Setter Property="Visibility" Value="Collapsed"/>
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding HasManifestProfileName}" Value="True">
-                        <Setter Property="Visibility" Value="Visible"/>
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBlock.Style>
-              </TextBlock>
+                         Foreground="{DynamicResource SecondaryTextBrush}"/>
+              <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedArchive.ManifestProfileName}"
+                         TextTrimming="CharacterEllipsis"/>
             </Grid>
           </ScrollViewer>
         </Border>
