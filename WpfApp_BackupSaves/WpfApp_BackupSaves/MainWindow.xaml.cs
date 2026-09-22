@@ -619,6 +619,7 @@ public partial class MainWindow : Window
                 continue;
             }
 
+            var meta = ArchiveMetaStore.Load(f.FullName);
             var created = new ArchiveListItem
             {
                 Path = f.FullName,
@@ -627,7 +628,8 @@ public partial class MainWindow : Window
                 SizeBytes = f.Length,
                 FormatDisplay = f.Extension.TrimStart('.').ToUpperInvariant()
             };
-            created.DisplayName = ArchiveMetaStore.LoadDisplayName(f.FullName) ?? "";
+            created.DisplayName = meta.DisplayName?.Trim() ?? "";
+            created.ExcludeFromRetention = meta.ExcludeFromRetention;
             next.Add(created);
         }
 
@@ -969,6 +971,18 @@ public partial class MainWindow : Window
         _editingArchiveDisplayName = true;
     }
 
+    private void ArchiveDisplayName_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter)
+            return;
+
+        e.Handled = true;
+        // Move focus away → LostFocus commits the name.
+        if (sender is System.Windows.Controls.TextBox tb)
+            tb.MoveFocus(new System.Windows.Input.TraversalRequest(
+                System.Windows.Input.FocusNavigationDirection.Next));
+    }
+
     private void ArchiveDisplayName_LostFocus(object sender, RoutedEventArgs e)
     {
         try
@@ -996,6 +1010,29 @@ public partial class MainWindow : Window
         finally
         {
             _editingArchiveDisplayName = false;
+        }
+    }
+
+    private void ArchiveKeepForever_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedArchive is null)
+            return;
+
+        var archive = _vm.SelectedArchive;
+        // Click runs after toggle; sync from control in case binding lagged.
+        if (sender is System.Windows.Controls.Primitives.ToggleButton tb)
+            archive.ExcludeFromRetention = tb.IsChecked == true;
+
+        try
+        {
+            ArchiveMetaStore.SaveExcludeFromRetention(archive.Path, archive.ExcludeFromRetention);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Failed to save archive keep-forever flag", ex);
+            MessageBox.Show(this, LocalizationService.Text("msg.saveArchiveKeepFailed", ex.Message),
+                LocalizationService.Text("msg.archivesTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

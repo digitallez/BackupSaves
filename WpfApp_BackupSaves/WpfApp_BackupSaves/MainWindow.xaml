@@ -121,7 +121,7 @@
         <Border DockPanel.Dock="Bottom" Margin="0,8,0,0" Padding="10,8"
                 Background="{DynamicResource PanelBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrushKey}" BorderThickness="1"
-                Height="210"
+                Height="220"
                 CacheMode="BitmapCache">
           <Border.Style>
             <Style TargetType="Border">
@@ -149,6 +149,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
               </Grid.RowDefinitions>
               <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc archive.displayName}"
                          VerticalAlignment="Center" Margin="0,0,10,4"
@@ -157,7 +158,8 @@
                        Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Padding="4,2"
                        Text="{Binding SelectedArchive.DisplayName, UpdateSourceTrigger=Explicit}"
                        GotFocus="ArchiveDisplayName_GotFocus"
-                       LostFocus="ArchiveDisplayName_LostFocus"/>
+                       LostFocus="ArchiveDisplayName_LostFocus"
+                       KeyDown="ArchiveDisplayName_KeyDown"/>
               <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Loc archive.fileName}"
                          VerticalAlignment="Center" Margin="0,0,10,4"
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
@@ -188,10 +190,23 @@
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
               <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedArchive.CreatedDisplay}" Margin="0,0,0,4"/>
               <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:Loc archive.profile}"
-                         VerticalAlignment="Center" Margin="0,0,10,0"
+                         VerticalAlignment="Center" Margin="0,0,10,4"
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
               <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedArchive.ManifestProfileName}"
-                         TextTrimming="CharacterEllipsis"/>
+                         TextTrimming="CharacterEllipsis" Margin="0,0,0,4"/>
+              <TextBlock Grid.Row="8" Grid.Column="0" Text="{loc:Loc archive.keepForever}"
+                         VerticalAlignment="Center" Margin="0,2,10,0"
+                         TextWrapping="Wrap" MaxWidth="120"
+                         Foreground="{DynamicResource SecondaryTextBrush}"
+                         ToolTip="{loc:Loc archive.keepForeverTip}"/>
+              <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal"
+                          VerticalAlignment="Center" Margin="0,2,0,0"
+                          ToolTip="{loc:Loc archive.keepForeverTip}">
+                <ToggleButton Style="{StaticResource SwitchToggleStyle}"
+                              IsChecked="{Binding SelectedArchive.ExcludeFromRetention, Mode=TwoWay}"
+                              Click="ArchiveKeepForever_Click"
+                              ToolTip="{loc:Loc archive.keepForeverTip}"/>
+              </StackPanel>
             </Grid>
           </ScrollViewer>
         </Border>

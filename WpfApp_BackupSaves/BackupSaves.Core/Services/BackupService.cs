@@ -18,8 +18,10 @@ public sealed class RetentionService : IRetentionService
             return 0;
 
         var ext = PathHelper.GetArchiveExtension(format);
+        // Protected archives are neither counted toward the limit nor deleted.
         var archives = Directory.EnumerateFiles(profileArchiveDirectory, "*" + ext)
             .Where(f => !f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+            .Where(f => !ArchiveMetaStore.IsExcludedFromRetention(f))
             .Select(f => new FileInfo(f))
             .OrderByDescending(f => f.LastWriteTimeUtc)
             .ToList();

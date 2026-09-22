@@ -342,4 +342,47 @@
   <Style TargetType="ScrollViewer">
     <Setter Property="Background" Value="Transparent"/>
   </Style>
+
+  <!-- iOS-like switch (not native CheckBox) -->
+  <Style x:Key="SwitchToggleStyle" TargetType="ToggleButton">
+    <Setter Property="Width" Value="40"/>
+    <Setter Property="Height" Value="22"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Focusable" Value="True"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ToggleButton">
+          <Grid Width="40" Height="22">
+            <Border x:Name="Track"
+                    Background="{DynamicResource BorderBrushKey}"
+                    CornerRadius="11"/>
+            <Border x:Name="Thumb"
+                    Width="16" Height="16"
+                    CornerRadius="8"
+                    Background="White"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Margin="3,0,0,0">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.35" Color="#000000"/>
+              </Border.Effect>
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="Track" Property="Background" Value="{DynamicResource ProcessRunningBrush}"/>
+              <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+              <Setter TargetName="Thumb" Property="Margin" Value="0,0,3,0"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Track" Property="Opacity" Value="0.85"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.45"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 </ResourceDictionary>

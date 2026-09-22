@@ -12,6 +12,7 @@ public sealed class ArchiveListItem : INotifyPropertyChanged
     private string _manifestProfileName = "";
     private string _createdDisplay = "";
     private string _formatDisplay = "";
+    private bool _excludeFromRetention;
 
     public string Path { get; init; } = "";
     public string Name { get; init; } = "";
@@ -38,6 +39,18 @@ public sealed class ArchiveListItem : INotifyPropertyChanged
     /// <summary>List label: custom display name if set, otherwise file name.</summary>
     public string ListTitle =>
         string.IsNullOrWhiteSpace(_displayName) ? Name : _displayName.Trim();
+
+    /// <summary>When true, archive is ignored by retention count and never auto-deleted.</summary>
+    public bool ExcludeFromRetention
+    {
+        get => _excludeFromRetention;
+        set
+        {
+            if (_excludeFromRetention == value) return;
+            _excludeFromRetention = value;
+            OnPropertyChanged();
+        }
+    }
 
     public string ManifestProfileName
     {
