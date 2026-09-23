@@ -13,6 +13,7 @@ public sealed class ArchiveListItem : INotifyPropertyChanged
     private string _createdDisplay = "";
     private string _formatDisplay = "";
     private bool _excludeFromRetention;
+    private int _rowNumber;
 
     public string Path { get; init; } = "";
     public string Name { get; init; } = "";
@@ -21,6 +22,18 @@ public sealed class ArchiveListItem : INotifyPropertyChanged
     public string SizeDisplay => SizeBytes < 1024 * 1024
         ? $"{SizeBytes / 1024.0:0.0} KB"
         : $"{SizeBytes / (1024.0 * 1024):0.00} MB";
+
+    /// <summary>1-based row index in the archives list.</summary>
+    public int RowNumber
+    {
+        get => _rowNumber;
+        set
+        {
+            if (_rowNumber == value) return;
+            _rowNumber = value;
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>User-editable title; empty means fall back to file name.</summary>
     public string DisplayName

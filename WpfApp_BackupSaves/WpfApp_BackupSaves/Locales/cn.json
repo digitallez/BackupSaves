@@ -57,6 +57,7 @@
   "main.nextBackupSpanMs": "{0}分{1}秒",
   "main.nextBackupSpanS": "{0}秒",
   "tray.open": "打开",
+  "tray.resetPosition": "恢复窗口位置",
   "tray.exit": "退出",
   "tray.minimized": "已最小化到托盘",
   "tray.running": "在托盘中运行",

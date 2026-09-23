@@ -41,6 +41,8 @@ public partial class MainWindow : Window
     private DateTimeOffset _taskNextRunCacheAt = DateTimeOffset.MinValue;
     private readonly Dictionary<Guid, bool> _watchRunningCache = new();
     private int _profilesLiveGate;
+    private DispatcherTimer? _placementSaveTimer;
+    private bool _placementReady;
 
     public MainWindow()
     {
@@ -54,6 +56,7 @@ public partial class MainWindow : Window
         DataContext = _vm;
         _watcher = new ArchiveFolderWatcher(() => Dispatcher.Invoke(RefreshArchives));
         InitTray();
+        TryRestoreWindowPlacementEarly();
         _vm.LanguageChanged += OnUiLanguageChanged;
         LocalizationService.Instance.LanguageChanged += (_, _) =>
         {
@@ -66,7 +69,92 @@ public partial class MainWindow : Window
                 UpdateHistoryFilterDisplay();
             });
         };
+        LocationChanged += (_, _) => ScheduleSaveWindowPlacement();
+        SizeChanged += (_, _) => ScheduleSaveWindowPlacement();
         Loaded += async (_, _) => await LoadAsync();
+    }
+
+    private void TryRestoreWindowPlacementEarly()
+    {
+        try
+        {
+            _app = _settings.Load();
+            if (!WindowPlacement.TryApply(this, _app.Ui))
+            {
+                // Invisible / missing monitor / no saved bounds → default centered layout.
+                WindowPlacement.ApplyDefault(this);
+                if (WindowPlacement.HasSavedPlacement(_app.Ui))
+                {
+                    AppLog.Default.Info("App", "Saved window placement is off-screen; using default");
+                    WindowPlacement.Clear(_app.Ui);
+                    _settings.Save(_app);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Warn("App", $"Window placement restore failed: {ex.Message}");
+            WindowPlacement.ApplyDefault(this);
+        }
+        finally
+        {
+            _placementReady = true;
+        }
+    }
+
+    private void ScheduleSaveWindowPlacement()
+    {
+        if (!_placementReady || _cleanedUp)
+            return;
+
+        _placementSaveTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _placementSaveTimer.Tick -= PlacementSaveTimer_Tick;
+        _placementSaveTimer.Tick += PlacementSaveTimer_Tick;
+        _placementSaveTimer.Stop();
+        _placementSaveTimer.Start();
+    }
+
+    private void PlacementSaveTimer_Tick(object? sender, EventArgs e)
+    {
+        _placementSaveTimer?.Stop();
+        SaveWindowPlacement();
+    }
+
+    private void SaveWindowPlacement(bool force = false)
+    {
+        if (!_placementReady)
+            return;
+        if (_cleanedUp && !force)
+            return;
+
+        try
+        {
+            // When minimized, keep last Normal/Maximized bounds already in _app.Ui.
+            if (WindowState != WindowState.Minimized)
+                WindowPlacement.Capture(this, _app.Ui);
+            _settings.Save(_app);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Warn("App", $"Window placement save failed: {ex.Message}");
+        }
+    }
+
+    private void ResetWindowPlacementFromTray()
+    {
+        WindowPlacement.Clear(_app.Ui);
+        WindowPlacement.ApplyDefault(this);
+        try
+        {
+            _settings.Save(_app);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Warn("App", $"Window placement reset save failed: {ex.Message}");
+        }
+
+        BringToForeground();
+        AppLog.Default.Info("App", "Window placement reset to default from tray");
     }
 
     private async void OnUiLanguageChanged(object? sender, string culture)
@@ -99,12 +187,16 @@ public partial class MainWindow : Window
         if (_tray is null) return;
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add(LocalizationService.Text("tray.open"), null, (_, _) => RestoreFromTray());
+        menu.Items.Add(LocalizationService.Text("tray.resetPosition"), null, (_, _) =>
+            Dispatcher.Invoke(ResetWindowPlacementFromTray));
+        menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add(LocalizationService.Text("tray.exit"), null, (_, _) =>
         {
             AppLog.Default.Info("App", "Exit from tray");
             _reallyClose = true;
             Close();
         });
+        TrayMenuTheme.Apply(menu, ThemeManager.Current);
         _tray.ContextMenuStrip = menu;
     }
 
@@ -287,6 +379,7 @@ public partial class MainWindow : Window
         var next = ThemeManager.Toggle();
         _app.Ui.Theme = next;
         UpdateThemeToggleCaption();
+        RebuildTrayMenu();
         AppLog.Default.Info("Settings", $"Theme → {next}");
         await _settings.SaveAsync(_app);
         _vm.Status = next == AppTheme.Dark
@@ -692,6 +785,9 @@ public partial class MainWindow : Window
 
         while (_vm.Archives.Count > next.Count)
             _vm.Archives.RemoveAt(_vm.Archives.Count - 1);
+
+        for (var i = 0; i < _vm.Archives.Count; i++)
+            _vm.Archives[i].RowNumber = i + 1;
     }
 
     private async Task PersistAndSyncSchedulerAsync(BackupProfile? changed = null)
@@ -1162,11 +1258,18 @@ public partial class MainWindow : Window
 
     private void Window_StateChanged(object? sender, EventArgs e)
     {
+        if (WindowState != WindowState.Minimized)
+            WindowPlacement.Capture(this, _app.Ui);
+
         if (WindowState == WindowState.Minimized && _app.Ui.MinimizeToTray)
         {
+            SaveWindowPlacement();
             Hide();
             _tray!.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.minimized"), WinForms.ToolTipIcon.Info);
+            return;
         }
+
+        ScheduleSaveWindowPlacement();
     }
 
     /// <summary>Show window (incl. from tray) and bring to foreground — also used by single-instance activation.</summary>
@@ -1209,6 +1312,7 @@ public partial class MainWindow : Window
         {
             case CloseChoice.HideToTray:
                 AppLog.Default.Info("App", "User hid app to tray");
+                SaveWindowPlacement();
                 Hide();
                 _tray?.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.running"), WinForms.ToolTipIcon.Info);
                 break;
@@ -1228,6 +1332,14 @@ public partial class MainWindow : Window
     private void CleanupOnExit()
     {
         if (_cleanedUp) return;
+
+        if (_placementSaveTimer is not null)
+        {
+            _placementSaveTimer.Stop();
+            _placementSaveTimer.Tick -= PlacementSaveTimer_Tick;
+            _placementSaveTimer = null;
+        }
+        SaveWindowPlacement(force: true);
         _cleanedUp = true;
         AppLog.Default.Info("App", "Main window closing");
         if (_profilesLiveTimer is not null)

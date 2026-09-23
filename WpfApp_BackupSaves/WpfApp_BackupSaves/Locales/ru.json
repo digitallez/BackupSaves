@@ -57,6 +57,7 @@
   "main.nextBackupSpanMs": "{0}м {1}с",
   "main.nextBackupSpanS": "{0}с",
   "tray.open": "Открыть",
+  "tray.resetPosition": "Восстановить положение окна",
   "tray.exit": "Выход",
   "tray.minimized": "Свёрнуто в трей",
   "tray.running": "Работает в трее",

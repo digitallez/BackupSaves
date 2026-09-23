@@ -5,7 +5,7 @@
         xmlns:loc="clr-namespace:WpfApp_BackupSaves.Markup"
         xmlns:vm="clr-namespace:WpfApp_BackupSaves.ViewModels"
         xmlns:models="clr-namespace:BackupSaves.Core.Models;assembly=BackupSaves.Core"
-        Title="BackupSaves" Height="740" Width="1080"
+         Title="BackupSaves" Height="740" Width="1110"
         WindowStartupLocation="CenterScreen"
         Icon="pack://application:,,,/Assets/app.ico"
         Background="{DynamicResource WindowBackgroundBrush}"
@@ -227,25 +227,30 @@
                         IsEnabled="{Binding HasArchive}"/>
             </ContextMenu>
           </ListBox.ContextMenu>
-          <ListBox.ItemTemplate>
-            <DataTemplate>
-              <Grid Margin="0,1">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*"/>
-                  <ColumnDefinition Width="140"/>
-                  <ColumnDefinition Width="72"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding ListTitle}" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" ToolTip="{Binding Name}"/>
-                <TextBlock Grid.Column="1" Text="{Binding LastWriteTime, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
-                           VerticalAlignment="Center" Margin="8,0,0,0"
-                           Foreground="{DynamicResource SecondaryTextBrush}"/>
-                <TextBlock Grid.Column="2" Text="{Binding SizeDisplay}"
-                           VerticalAlignment="Center" HorizontalAlignment="Right"
-                           Foreground="{DynamicResource SecondaryTextBrush}"/>
-              </Grid>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
+           <ListBox.ItemTemplate>
+             <DataTemplate>
+               <Grid Margin="0,1">
+                 <Grid.ColumnDefinitions>
+                   <ColumnDefinition Width="28"/>
+                   <ColumnDefinition Width="*"/>
+                   <ColumnDefinition Width="140"/>
+                   <ColumnDefinition Width="72"/>
+                 </Grid.ColumnDefinitions>
+                 <TextBlock Grid.Column="0" Text="{Binding RowNumber}"
+                            VerticalAlignment="Center" HorizontalAlignment="Right"
+                            Margin="0,0,8,0"
+                            Foreground="{DynamicResource SecondaryTextBrush}"/>
+                 <TextBlock Grid.Column="1" Text="{Binding ListTitle}" TextTrimming="CharacterEllipsis"
+                            VerticalAlignment="Center" ToolTip="{Binding Name}"/>
+                 <TextBlock Grid.Column="2" Text="{Binding LastWriteTime, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
+                            VerticalAlignment="Center" Margin="8,0,0,0"
+                            Foreground="{DynamicResource SecondaryTextBrush}"/>
+                 <TextBlock Grid.Column="3" Text="{Binding SizeDisplay}"
+                            VerticalAlignment="Center" HorizontalAlignment="Right"
+                            Foreground="{DynamicResource SecondaryTextBrush}"/>
+               </Grid>
+             </DataTemplate>
+           </ListBox.ItemTemplate>
         </ListBox>
       </DockPanel>
 

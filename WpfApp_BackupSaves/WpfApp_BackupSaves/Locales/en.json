@@ -57,6 +57,7 @@
   "main.nextBackupSpanMs": "{0}m {1}s",
   "main.nextBackupSpanS": "{0}s",
   "tray.open": "Open",
+  "tray.resetPosition": "Reset window position",
   "tray.exit": "Exit",
   "tray.minimized": "Minimized to tray",
   "tray.running": "Running in tray",

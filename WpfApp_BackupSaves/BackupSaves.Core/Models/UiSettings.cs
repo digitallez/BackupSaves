@@ -17,4 +17,19 @@ public sealed class UiSettings
 
     /// <summary>Local path to already downloaded zip for pending update.</summary>
     public string? PendingUpdateZipPath { get; set; }
+
+    /// <summary>Last main-window Left (DIP). Null = no saved placement.</summary>
+    public double? WindowLeft { get; set; }
+
+    /// <summary>Last main-window Top (DIP).</summary>
+    public double? WindowTop { get; set; }
+
+    /// <summary>Last main-window Width (DIP, restore bounds when maximized).</summary>
+    public double? WindowWidth { get; set; }
+
+    /// <summary>Last main-window Height (DIP, restore bounds when maximized).</summary>
+    public double? WindowHeight { get; set; }
+
+    /// <summary>Whether the main window was maximized.</summary>
+    public bool WindowMaximized { get; set; }
 }
