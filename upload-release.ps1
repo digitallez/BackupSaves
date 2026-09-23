@@ -7,7 +7,7 @@
   1) Finds BackupSaves.exe under bin\Release\net9.0-windows*
   2) Reads version from the exe ProductVersion
   3) Zips contents (no .pdb / .xml) -> releases\BackupSaves-<ver>.zip
-  4) Creates/updates release on digitallez/BackupSaves-Releases via gh
+  4) Creates/updates release on digitallez/BackupSaves via gh
 
 .EXAMPLE
   .\upload-release.ps1
@@ -16,7 +16,7 @@
 [CmdletBinding()]
 param(
     [string] $BinDir = "",
-    [string] $ReleasesRepo = "digitallez/BackupSaves-Releases",
+    [string] $ReleasesRepo = "digitallez/BackupSaves",
     [switch] $NoUpload
 )
 

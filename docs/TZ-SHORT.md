@@ -1,8 +1,7 @@
 # BackupSaves — короткое ТЗ (копировать в чат)
 
 ```
-Проект: C:\Users\vladimir.chako\source\repos\BackupSaves
-Решение: WpfApp_BackupSaves (WPF уже создан). Правила: .cursor/rules/ + docs/DEV-PLAN.md
+Решение: WpfApp_BackupSaves (WPF). Правила: .cursor/rules/ + docs/DEV-PLAN.md
 
 Сделать утилиту бэкапа сейвов игр на Windows 10+.
 

@@ -57,4 +57,4 @@ FileSystemWatcher (`*.zip`, `*.7z`) + debounce + polling 5–10 с; старт =
 - [x] Понятная ошибка «файл занят»
 - [x] Headless exit codes корректны
 - [x] Логи в `%LocalAppData%\BackupSaves\logs` + кнопка «Логи» в UI
-- [x] Публикация релиза (`upload-release.bat`) и автообновление из `BackupSaves-Releases`
+- [x] Публикация релиза (`upload-release.bat`) и автообновление из `digitallez/BackupSaves` Releases

@@ -20,7 +20,7 @@
   After packaging, create local git tag v<version> (not pushed).
 
 .PARAMETER UploadToReleasesRepo
-  Upload zip to public repo digitallez/BackupSaves-Releases via `gh release create`.
+  Upload zip to digitallez/BackupSaves Releases via `gh release create`.
   Requires GitHub CLI (`gh`) authenticated.
 
 .EXAMPLE
@@ -33,7 +33,7 @@ param(
     [string] $PublishDir = "",
     [switch] $CreateLocalTag,
     [switch] $UploadToReleasesRepo,
-    [string] $ReleasesRepo = "digitallez/BackupSaves-Releases"
+    [string] $ReleasesRepo = "digitallez/BackupSaves"
 )
 
 $ErrorActionPreference = "Stop"
@@ -165,14 +165,14 @@ SHA256: $hash
 Size:  $sizeMb MB
 
 Contents: framework-dependent publish (.NET 9 Windows Desktop Runtime required).
-Auto-update source: https://github.com/digitallez/BackupSaves-Releases/releases
+Auto-update source: https://github.com/digitallez/BackupSaves/releases
 
---- Upload to public releases repo ---
+--- Upload to GitHub Releases ---
   .\publish-release.ps1 -SkipBuild -NoVersionIncrement -UploadToReleasesRepo
   # or after this build:
-  gh release create v$version `"$zipPath`" --repo digitallez/BackupSaves-Releases --title "BackupSaves $version" --notes "Release $version"
+  gh release create v$version `"$zipPath`" --repo digitallez/BackupSaves --title "BackupSaves $version" --notes "Release $version"
 
---- Source repo (private) ---
+--- After release ---
 1. git add WpfApp_BackupSaves/WpfApp_BackupSaves/Version.props
 2. git commit -m "Release v$version"
 3. git push origin main

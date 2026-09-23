@@ -24,7 +24,7 @@ public interface IUpdateChecker
 public sealed class GitHubReleaseUpdateChecker : IUpdateChecker
 {
     public const string Owner = "digitallez";
-    public const string Repo = "BackupSaves-Releases";
+    public const string Repo = "BackupSaves";
 
     private static readonly HttpClient Http = CreateClient();
 
