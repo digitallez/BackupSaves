@@ -65,6 +65,10 @@
               <MenuItem Header="{loc:Loc main.delete}" Click="DeleteProfile_Click"
                         IsEnabled="{Binding HasProfile}"/>
               <Separator/>
+              <MenuItem Header="{loc:Loc main.backupNow}" Click="BackupNow_Click"
+                        IsEnabled="{Binding HasProfile}" FontWeight="SemiBold"/>
+              <MenuItem Header="{loc:Loc main.openFolder}" Click="OpenFolder_Click"
+                        IsEnabled="{Binding HasProfile}"/>
               <MenuItem Header="{loc:Loc main.filterHistory}" Click="FilterHistoryByProfile_Click"
                         IsEnabled="{Binding HasProfile}"/>
             </ContextMenu>
