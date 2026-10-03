@@ -1,9 +1,11 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using BackupSaves.Core.Models;
 using BackupSaves.Core.Services;
 using WpfApp_BackupSaves.Services;
 using WpfApp_BackupSaves.ViewModels;
+using WinForms = System.Windows.Forms;
 
 namespace WpfApp_BackupSaves.Dialogs;
 
@@ -77,11 +79,22 @@ public partial class SettingsWindow : Window
                 ?? CloseActionCombo.Items[0];
 
             RefreshInstallButton();
+            LoadDevFolderPanel();
         }
         finally
         {
             _suppress = false;
         }
+    }
+
+    private void LoadDevFolderPanel()
+    {
+#if DEBUG
+        DevFolderPanel.Visibility = Visibility.Visible;
+        DevFolderBox.Text = _app.Ui.DevBuildFolder ?? "";
+#else
+        DevFolderPanel.Visibility = Visibility.Collapsed;
+#endif
     }
 
     private void RefreshInstallButton()
@@ -216,8 +229,49 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void Ok_Click(object sender, RoutedEventArgs e)
+#if DEBUG
+    private async void DevFolderBrowse_Click(object sender, RoutedEventArgs e)
     {
+        using var dlg = new WinForms.FolderBrowserDialog
+        {
+            Description = LocalizationService.Text("settings.devFolder"),
+            UseDescriptionForTitle = true,
+            SelectedPath = Directory.Exists(DevFolderBox.Text)
+                ? DevFolderBox.Text
+                : (_app.Ui.DevBuildFolder ?? "")
+        };
+        if (dlg.ShowDialog() != WinForms.DialogResult.OK)
+            return;
+
+        DevFolderBox.Text = dlg.SelectedPath;
+        await SaveDevFolderAsync();
+    }
+
+    private async void DevFolderBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppress)
+            return;
+        await SaveDevFolderAsync();
+    }
+
+    private async Task SaveDevFolderAsync()
+    {
+        var path = DevFolderBox.Text.Trim();
+        var normalized = string.IsNullOrWhiteSpace(path) ? null : path;
+        if (string.Equals(_app.Ui.DevBuildFolder ?? "", normalized ?? "", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _app.Ui.DevBuildFolder = normalized;
+        await SaveAsync();
+        AppLog.Default.Info("Settings", $"DevBuildFolder set to \"{normalized}\"");
+    }
+#endif
+
+    private async void Ok_Click(object sender, RoutedEventArgs e)
+    {
+#if DEBUG
+        await SaveDevFolderAsync();
+#endif
         DialogResult = true;
         Close();
     }

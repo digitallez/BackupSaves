@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 
 namespace WpfApp_BackupSaves;
@@ -28,6 +30,30 @@ public static class AppVersion
         return v is null ? "0.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
     }
 
+    /// <summary>Reads ProductVersion / InformationalVersion from an exe on disk.</summary>
+    public static string? ReadFromExe(string exePath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+                return null;
+
+            var vi = FileVersionInfo.GetVersionInfo(exePath);
+            var raw = vi.ProductVersion;
+            if (string.IsNullOrWhiteSpace(raw))
+                raw = vi.FileVersion;
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            var plus = raw.IndexOf('+');
+            return plus >= 0 ? raw[..plus] : raw.Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static Version? ParseCore(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -44,10 +70,64 @@ public static class AppVersion
         return Version.TryParse(s, out var v) ? v : null;
     }
 
+    /// <summary>
+    /// Debug stamp from <c>1.0.0-debug-yyMMddHHmmss</c>, or null when absent.
+    /// </summary>
+    public static long? ParseDebugStamp(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+
+        var s = raw.Trim();
+        const string marker = "-debug-";
+        var idx = s.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0)
+            return null;
+
+        var stamp = s[(idx + marker.Length)..];
+        var end = stamp.IndexOfAny(['+', '-', ' ']);
+        if (end >= 0)
+            stamp = stamp[..end];
+
+        return long.TryParse(stamp, out var n) ? n : null;
+    }
+
     public static bool IsNewer(string remoteTagOrVersion, Version current)
     {
         var remote = ParseCore(remoteTagOrVersion);
         return remote is not null && remote > current;
+    }
+
+    /// <summary>
+    /// True when <paramref name="candidate"/> is a newer build than <paramref name="current"/>,
+    /// including Debug stamps (<c>1.0.0-debug-yyMMddHHmmss</c>).
+    /// Same numeric + newer stamp → newer; Release equal to Debug numeric → newer (replace debug).
+    /// </summary>
+    public static bool IsBuildNewer(string? candidate, string? current)
+    {
+        if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(current))
+            return false;
+
+        var cNum = ParseCore(candidate);
+        var curNum = ParseCore(current);
+        if (cNum is null || curNum is null)
+            return false;
+
+        if (cNum > curNum)
+            return true;
+        if (cNum < curNum)
+            return false;
+
+        var cStamp = ParseDebugStamp(candidate);
+        var curStamp = ParseDebugStamp(current);
+        if (cStamp is not null && curStamp is not null)
+            return cStamp > curStamp;
+
+        // Release (no stamp) replaces Debug at the same number.
+        if (curStamp is not null && cStamp is null)
+            return true;
+
+        return false;
     }
 
     /// <summary>

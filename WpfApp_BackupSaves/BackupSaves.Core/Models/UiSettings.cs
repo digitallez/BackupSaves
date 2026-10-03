@@ -24,6 +24,12 @@ public sealed class UiSettings
     /// </summary>
     public string? LastAppliedLocalArchiveKey { get; set; }
 
+    /// <summary>
+    /// Debug: path to the development/build output folder.
+    /// On startup the installed app compares versions with BackupSaves.exe there and may offer an update.
+    /// </summary>
+    public string? DevBuildFolder { get; set; }
+
     /// <summary>Last main-window Left (DIP). Null = no saved placement.</summary>
     public double? WindowLeft { get; set; }
 

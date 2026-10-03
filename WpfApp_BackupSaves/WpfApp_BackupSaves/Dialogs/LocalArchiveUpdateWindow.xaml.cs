@@ -9,17 +9,38 @@ public partial class LocalArchiveUpdateWindow : Window
 {
     public bool Accepted { get; private set; }
 
-    public LocalArchiveUpdateWindow(string archivePath, bool archiveLikelyNewer)
+    public LocalArchiveUpdateWindow(LocalUpdateCandidate candidate)
+        : this(candidate.DisplayPath, candidate.IsNewer, candidate.VersionLabel)
+    {
+    }
+
+    public LocalArchiveUpdateWindow(string archivePath, bool archiveLikelyNewer, string? candidateVersion = null)
     {
         InitializeComponent();
         CustomWindowChrome.Apply(this);
 
-        var name = Path.GetFileName(archivePath);
-        TitleBlock.Text = LocalizationService.Text("update.localAvailable", name);
-        BodyBlock.Text = LocalizationService.Text(
-            "update.localBody",
-            AppVersion.Current,
-            archivePath);
+        var name = Path.GetFileName(archivePath.TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(name))
+            name = archivePath;
+
+        if (!string.IsNullOrWhiteSpace(candidateVersion) && candidateVersion != "?")
+        {
+            TitleBlock.Text = LocalizationService.Text("update.localDevAvailable", candidateVersion);
+            BodyBlock.Text = LocalizationService.Text(
+                "update.localDevBody",
+                AppVersion.Current,
+                candidateVersion,
+                archivePath);
+        }
+        else
+        {
+            TitleBlock.Text = LocalizationService.Text("update.localAvailable", name);
+            BodyBlock.Text = LocalizationService.Text(
+                "update.localBody",
+                AppVersion.Current,
+                archivePath);
+        }
 
         if (!archiveLikelyNewer)
         {

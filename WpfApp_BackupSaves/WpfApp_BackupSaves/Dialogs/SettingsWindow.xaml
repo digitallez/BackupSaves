@@ -4,7 +4,7 @@
         xmlns:controls="clr-namespace:WpfApp_BackupSaves.Controls"
         xmlns:loc="clr-namespace:WpfApp_BackupSaves.Markup"
         Title="{loc:Loc settings.title}"
-        Width="460" SizeToContent="Height"
+        Width="500" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -76,6 +76,20 @@
           <TextBlock x:Name="InstallButtonText" VerticalAlignment="Center"/>
         </StackPanel>
       </Button>
+
+      <StackPanel x:Name="DevFolderPanel" Visibility="Collapsed" Margin="0,0,0,14">
+        <TextBlock Text="{loc:Loc settings.devFolder}" FontWeight="SemiBold" Margin="0,0,0,6"
+                   ToolTip="{loc:Loc settings.devFolderTip}"/>
+        <DockPanel Margin="0,0,0,0"
+                   ToolTip="{loc:Loc settings.devFolderTip}">
+          <Button DockPanel.Dock="Right" MinWidth="88" Height="30" Margin="8,0,0,0"
+                  Content="{loc:Loc settings.devFolderBrowse}"
+                  Click="DevFolderBrowse_Click"
+                  ToolTip="{loc:Loc settings.devFolderTip}"/>
+          <TextBox x:Name="DevFolderBox" Height="30" VerticalContentAlignment="Center"
+                   LostFocus="DevFolderBox_LostFocus"/>
+        </DockPanel>
+      </StackPanel>
 
       <Button Content="{loc:Loc common.ok}" Height="34" HorizontalAlignment="Right"
               MinWidth="100" Click="Ok_Click" IsDefault="True" IsCancel="True"/>

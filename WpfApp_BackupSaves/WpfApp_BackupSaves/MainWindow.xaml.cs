@@ -356,61 +356,61 @@ public partial class MainWindow : Window
 
 #if DEBUG
     /// <summary>
-    /// Debug: if <c>{tfm}.7z/.zip</c> sits next to the exe, ask to apply it before GitHub check.
-    /// Returns true when the app is shutting down to apply the archive.
+    /// Debug: if a newer build exists in DevBuildFolder (or archive next to the exe), offer update.
+    /// Returns true when the app is shutting down to apply the update.
     /// </summary>
     private bool TryOfferLocalArchiveUpdateAtStartup()
     {
-        var path = UpdateInstaller.FindLocalBuildFolderArchive();
-        if (string.IsNullOrWhiteSpace(path))
+        var candidate = UpdateInstaller.FindLocalUpdateCandidate(_app.Ui.DevBuildFolder);
+        if (candidate is null || !candidate.IsNewer)
             return false;
 
-        var key = UpdateInstaller.GetLocalArchiveKey(path);
-        if (!string.IsNullOrWhiteSpace(key)
-            && string.Equals(_app.Ui.LastAppliedLocalArchiveKey, key, StringComparison.Ordinal))
+        if (string.Equals(_app.Ui.LastAppliedLocalArchiveKey, candidate.FingerprintKey, StringComparison.Ordinal))
         {
             AppLog.Default.Info("Update",
-                $"Debug startup: local archive already applied ({key}), skip prompt");
+                $"Debug startup: local build already applied ({candidate.FingerprintKey}), skip prompt");
             return false;
         }
 
-        var newer = UpdateInstaller.IsLocalArchiveLikelyNewer(path);
         AppLog.Default.Info("Update",
-            $"Debug startup: local archive \"{path}\" likelyNewerThanExe={newer}");
+            $"Debug startup: local build \"{candidate.DisplayPath}\" v={candidate.VersionLabel} newer={candidate.IsNewer}");
 
-        var dlg = new LocalArchiveUpdateWindow(path, newer) { Owner = this };
+        var dlg = new LocalArchiveUpdateWindow(candidate) { Owner = this };
         dlg.ShowDialog();
         if (!dlg.Accepted)
         {
-            AppLog.Default.Info("Update", "Debug startup: user postponed local archive update");
+            AppLog.Default.Info("Update", "Debug startup: user postponed local build update");
             return false;
         }
 
-        ApplyLocalArchiveAndShutdown(path);
+        ApplyLocalCandidateAndShutdown(candidate);
         return true;
     }
 #endif
 
-    private void ApplyLocalArchiveAndShutdown(string archivePath)
+    private void ApplyLocalCandidateAndShutdown(LocalUpdateCandidate candidate)
     {
         _vm.IsBusy = true;
-        _vm.Status = LocalizationService.Text("update.statusLocalApplying", Path.GetFileName(archivePath));
+        var label = !string.IsNullOrWhiteSpace(candidate.VersionLabel)
+            ? candidate.VersionLabel
+            : Path.GetFileName(candidate.DisplayPath);
+        _vm.Status = LocalizationService.Text("update.statusLocalApplying", label);
         try
         {
-            AppLog.Default.Info("App", $"Applying local update from \"{archivePath}\"");
+            AppLog.Default.Info("App", $"Applying local update from \"{candidate.DisplayPath}\"");
             _app.Ui.PendingUpdateZipPath = null;
             _app.Ui.PendingUpdateVersion = null;
-            _app.Ui.LastAppliedLocalArchiveKey = UpdateInstaller.GetLocalArchiveKey(archivePath);
+            _app.Ui.LastAppliedLocalArchiveKey = candidate.FingerprintKey;
             _settings.Save(_app);
 
             _reallyClose = true;
             CleanupOnExit();
-            UpdateInstaller.ApplyLocalArchiveAndExit(archivePath, restart: true);
+            UpdateInstaller.ApplyLocalCandidateAndExit(candidate, restart: true);
             System.Windows.Application.Current.Shutdown();
         }
         catch (Exception ex)
         {
-            AppLog.Default.Error("Update", "Local archive update failed", ex);
+            AppLog.Default.Error("Update", "Local update failed", ex);
             _reallyClose = false;
             _vm.IsBusy = false;
             AppMessageBox.Show(this,
@@ -418,6 +418,18 @@ public partial class MainWindow : Window
                 LocalizationService.Text("update.title"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void ApplyLocalArchiveAndShutdown(string archivePath)
+    {
+        ApplyLocalCandidateAndShutdown(new LocalUpdateCandidate
+        {
+            DisplayPath = archivePath,
+            ArchivePath = archivePath,
+            VersionLabel = Path.GetFileName(archivePath),
+            FingerprintKey = UpdateInstaller.GetLocalArchiveKey(archivePath) ?? archivePath,
+            IsNewer = UpdateInstaller.IsLocalArchiveLikelyNewer(archivePath)
+        });
     }
 
     private async Task CheckForUpdatesAsync(bool fromUser = false)
@@ -1893,6 +1905,8 @@ public partial class MainWindow : Window
 
     private void RestoreFromTray() => BringToForeground();
 
+    private void OpenSettings_Click(object sender, RoutedEventArgs e) => OpenSettingsDialog();
+
     private void OpenSettingsDialog()
     {
         RestoreFromTray();
@@ -1954,7 +1968,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var dlg = new CloseChoiceWindow { Owner = this };
+        var dlg = new CloseChoiceWindow(_app) { Owner = this };
         dlg.ShowDialog();
 
         if (dlg.RememberChoice
@@ -1987,11 +2001,11 @@ public partial class MainWindow : Window
                 break;
             case CloseChoice.UpdateFromLocalArchive:
                 // Keep Cancel=true; apply after this Closing handler finishes (same pattern as GitHub update-now).
-                var archivePath = dlg.LocalUpdateArchivePath;
+                var candidate = dlg.LocalUpdate;
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    if (!string.IsNullOrWhiteSpace(archivePath))
-                        ApplyLocalArchiveAndShutdown(archivePath);
+                    if (candidate is not null)
+                        ApplyLocalCandidateAndShutdown(candidate);
                 }));
                 break;
             default:

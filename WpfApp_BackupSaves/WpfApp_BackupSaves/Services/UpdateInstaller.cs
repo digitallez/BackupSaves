@@ -9,6 +9,17 @@ using SharpCompress.Common;
 
 namespace WpfApp_BackupSaves.Services;
 
+/// <summary>Debug local update source: archive file or build-output directory.</summary>
+public sealed class LocalUpdateCandidate
+{
+    public required string DisplayPath { get; init; }
+    public string? ArchivePath { get; init; }
+    public string? BuildDirectory { get; init; }
+    public required string VersionLabel { get; init; }
+    public required string FingerprintKey { get; init; }
+    public bool IsNewer { get; init; }
+}
+
 public static class UpdateInstaller
 {
     private static readonly HttpClient Http = CreateClient();
@@ -47,7 +58,44 @@ public static class UpdateInstaller
     }
 
     /// <summary>
-    /// Debug helper: looks for a local update archive next to the exe.
+    /// Debug: find a newer local build to offer as an update.
+    /// Prefers <paramref name="preferredFolder"/> (exe version compare), then archives next to the running exe.
+    /// </summary>
+    public static LocalUpdateCandidate? FindLocalUpdateCandidate(string? preferredFolder)
+    {
+        if (!string.IsNullOrWhiteSpace(preferredFolder))
+        {
+            var fromDev = TryCandidateFromDirectory(preferredFolder, onlyIfNewer: true);
+            if (fromDev is not null)
+            {
+                AppLog.Default.Info("Update",
+                    $"Dev-folder candidate: \"{fromDev.DisplayPath}\" v={fromDev.VersionLabel} newer={fromDev.IsNewer}");
+                return fromDev;
+            }
+        }
+
+        foreach (var dir in EnumerateAppDirs())
+        {
+            if (!string.IsNullOrWhiteSpace(preferredFolder)
+                && PathsEqual(dir, preferredFolder))
+                continue;
+
+            var fromApp = TryCandidateFromDirectory(dir, onlyIfNewer: true);
+            if (fromApp is not null)
+            {
+                AppLog.Default.Info("Update",
+                    $"Local candidate next to app: \"{fromApp.DisplayPath}\" v={fromApp.VersionLabel}");
+                return fromApp;
+            }
+        }
+
+        AppLog.Default.Info("Update",
+            $"No newer local build (devFolder=\"{preferredFolder}\", ProcessPath=\"{Environment.ProcessPath}\")");
+        return null;
+    }
+
+    /// <summary>
+    /// Debug helper: looks for a local update archive next to the exe (and optionally in <paramref name="preferredFolder"/>).
     /// Tries, in order:
     /// <list type="number">
     /// <item><c>{folderName}.7z/.zip</c> (works in <c>bin/Debug/net9.0-…</c>)</item>
@@ -57,8 +105,29 @@ public static class UpdateInstaller
     /// </list>
     /// When several TFM-named archives match, the newest by mtime wins.
     /// </summary>
-    public static string? FindLocalBuildFolderArchive()
+    public static string? FindLocalBuildFolderArchive(string? preferredFolder = null)
     {
+        if (!string.IsNullOrWhiteSpace(preferredFolder))
+        {
+            try
+            {
+                var full = Path.GetFullPath(preferredFolder);
+                if (Directory.Exists(full))
+                {
+                    var found = FindArchiveInDirectory(full);
+                    if (found is not null)
+                    {
+                        AppLog.Default.Info("Update", $"Local build-folder archive found: \"{found}\"");
+                        return found;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Default.Warn("Update", $"Dev folder scan failed: {ex.Message}");
+            }
+        }
+
         foreach (var dir in EnumerateAppDirs())
         {
             var found = FindArchiveInDirectory(dir);
@@ -72,6 +141,74 @@ public static class UpdateInstaller
         AppLog.Default.Info("Update",
             $"No local build-folder archive next to exe (ProcessPath=\"{Environment.ProcessPath}\", BaseDirectory=\"{AppContext.BaseDirectory}\")");
         return null;
+    }
+
+    private static LocalUpdateCandidate? TryCandidateFromDirectory(string dir, bool onlyIfNewer)
+    {
+        string full;
+        try { full = Path.GetFullPath(dir); }
+        catch { return null; }
+
+        if (!Directory.Exists(full))
+            return null;
+
+        // Prefer BackupSaves.exe version compare (dev-folder workflow).
+        var exePath = Path.Combine(full, "BackupSaves.exe");
+        if (File.Exists(exePath) && !IsRunningExe(exePath))
+        {
+            var version = AppVersion.ReadFromExe(exePath) ?? "?";
+            var newer = AppVersion.IsBuildNewer(version, AppVersion.Current);
+            if (!onlyIfNewer || newer)
+            {
+                return new LocalUpdateCandidate
+                {
+                    DisplayPath = full,
+                    BuildDirectory = full,
+                    VersionLabel = version,
+                    FingerprintKey = GetLocalExeKey(exePath) ?? full,
+                    IsNewer = newer
+                };
+            }
+        }
+
+        // Fallback: packed archive in the folder.
+        var archive = FindArchiveInDirectory(full);
+        if (archive is null)
+            return null;
+
+        var archiveNewer = IsLocalArchiveLikelyNewer(archive);
+        if (onlyIfNewer && !archiveNewer)
+            return null;
+
+        return new LocalUpdateCandidate
+        {
+            DisplayPath = archive,
+            ArchivePath = archive,
+            VersionLabel = Path.GetFileName(archive),
+            FingerprintKey = GetLocalArchiveKey(archive) ?? archive,
+            IsNewer = archiveNewer
+        };
+    }
+
+    private static bool IsRunningExe(string exePath)
+    {
+        var current = Environment.ProcessPath;
+        return !string.IsNullOrWhiteSpace(current) && PathsEqual(current, exePath);
+    }
+
+    private static bool PathsEqual(string a, string b)
+    {
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string? FindArchiveInDirectory(string dir)
@@ -152,6 +289,25 @@ public static class UpdateInstaller
                 return null;
             var fi = new FileInfo(archivePath);
             return $"{fi.Length}:{fi.LastWriteTimeUtc.Ticks}:{fi.Name}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Fingerprint for a local debug exe: length + mtime + ProductVersion.
+    /// </summary>
+    public static string? GetLocalExeKey(string exePath)
+    {
+        try
+        {
+            if (!File.Exists(exePath))
+                return null;
+            var fi = new FileInfo(exePath);
+            var ver = AppVersion.ReadFromExe(exePath) ?? "";
+            return $"{fi.Length}:{fi.LastWriteTimeUtc.Ticks}:{ver}";
         }
         catch
         {
@@ -253,6 +409,78 @@ public static class UpdateInstaller
         AppLog.Default.Info("Update", $"Local archive apply: \"{archivePath}\" restart={restart}");
         var sourceDir = ExtractArchiveToTemp(archivePath);
         LaunchHelper(zipPath: null, sourceDir: sourceDir, restart: restart, keepArchive: true);
+    }
+
+    /// <summary>
+    /// Applies files from a build-output directory (debug workflow). Copies to a temp folder first
+    /// so the helper can delete the staging dir without touching the development tree.
+    /// </summary>
+    public static void ApplyFromBuildDirectoryAndExit(string buildDirectory, bool restart = true)
+    {
+        if (!Directory.Exists(buildDirectory))
+            throw new DirectoryNotFoundException(buildDirectory);
+
+        var exePath = Path.Combine(buildDirectory, "BackupSaves.exe");
+        if (!File.Exists(exePath))
+            throw new FileNotFoundException(LocalizationService.Text("update.errLocalArchive"), exePath);
+
+        AppLog.Default.Info("Update", $"Local build-dir apply: \"{buildDirectory}\" restart={restart}");
+        var staging = CopyBuildDirectoryToTemp(buildDirectory);
+        LaunchHelper(zipPath: null, sourceDir: staging, restart: restart, keepArchive: true);
+    }
+
+    /// <summary>Applies a <see cref="LocalUpdateCandidate"/> (archive or build folder).</summary>
+    public static void ApplyLocalCandidateAndExit(LocalUpdateCandidate candidate, bool restart = true)
+    {
+        if (!string.IsNullOrWhiteSpace(candidate.ArchivePath))
+        {
+            ApplyLocalArchiveAndExit(candidate.ArchivePath, restart);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate.BuildDirectory))
+        {
+            ApplyFromBuildDirectoryAndExit(candidate.BuildDirectory, restart);
+            return;
+        }
+
+        throw new InvalidOperationException("Local update candidate has no archive or build directory.");
+    }
+
+    private static string CopyBuildDirectoryToTemp(string buildDirectory)
+    {
+        var sourceRoot = buildDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var staging = Path.Combine(Path.GetTempPath(), "BackupSaves-frombuild-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(staging);
+        AppLog.Default.Info("Update", $"Staging build dir \"{sourceRoot}\" -> \"{staging}\"");
+
+        foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(sourceRoot, file);
+            if (ShouldSkipBuildFile(rel))
+                continue;
+
+            var dest = Path.Combine(staging, rel);
+            var destDir = Path.GetDirectoryName(dest);
+            if (!string.IsNullOrEmpty(destDir))
+                Directory.CreateDirectory(destDir);
+
+            File.Copy(file, dest, overwrite: true);
+        }
+
+        return staging;
+    }
+
+    private static bool ShouldSkipBuildFile(string relativePath)
+    {
+        var name = Path.GetFileName(relativePath);
+        if (name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
     }
 
     private static string ExtractArchiveToTemp(string archivePath)

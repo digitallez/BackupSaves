@@ -27,6 +27,14 @@
                   Click="OpenLogs_Click" ToolTip="{loc:Loc main.logsTooltip}"/>
           <Button x:Name="ThemeToggleButton" Content="{loc:Loc main.themeLight}" Padding="10,2" Margin="0,0,8,0"
                   Click="ThemeToggle_Click" ToolTip="{loc:Loc main.themeTooltip}"/>
+          <Button Padding="8,2" Click="OpenSettings_Click"
+                  ToolTip="{loc:Loc main.settingsTooltip}">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                         VerticalAlignment="Center" Margin="0,0,6,0"/>
+              <TextBlock Text="{loc:Loc main.settings}" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
         </StackPanel>
       </StatusBarItem>
       <StatusBarItem>
