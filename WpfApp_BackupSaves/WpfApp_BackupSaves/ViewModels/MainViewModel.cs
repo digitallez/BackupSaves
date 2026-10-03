@@ -18,6 +18,7 @@ public sealed class ArchiveListItem : INotifyPropertyChanged
     private int _rowNumber;
     private SolidColorBrush? _ageDotBrush;
     private bool _isVeryFresh;
+    private bool _isEditingDisplayName;
 
     public string Path { get; init; } = "";
     public string Name { get; init; } = "";
@@ -120,6 +121,18 @@ public sealed class ArchiveListItem : INotifyPropertyChanged
 
     /// <summary>True when the user set a custom title (not just the file name).</summary>
     public bool HasCustomDisplayName => !string.IsNullOrWhiteSpace(_displayName);
+
+    /// <summary>Inline title TextBox visible in the archives list (second click on selected row).</summary>
+    public bool IsEditingDisplayName
+    {
+        get => _isEditingDisplayName;
+        set
+        {
+            if (_isEditingDisplayName == value) return;
+            _isEditingDisplayName = value;
+            OnPropertyChanged();
+        }
+    }
     /// <summary>When true, archive is ignored by retention count and never auto-deleted.</summary>
     public bool ExcludeFromRetention
     {

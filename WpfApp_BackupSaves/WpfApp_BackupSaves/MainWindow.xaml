@@ -51,11 +51,12 @@
           <Button Content="{loc:Loc main.edit}" Width="84" Height="30" Margin="0,0,6,0" Click="EditProfile_Click" IsEnabled="{Binding HasProfile}"/>
           <Button Content="{loc:Loc main.delete}" Width="84" Height="30" Click="DeleteProfile_Click" IsEnabled="{Binding HasProfile}"/>
         </StackPanel>
-        <ListBox x:Name="ProfilesList"
-                 ItemsSource="{Binding Profiles}"
-                 SelectedItem="{Binding SelectedProfile}"
-                 SelectionChanged="Profiles_SelectionChanged"
-                 PreviewMouseRightButtonDown="ProfilesList_PreviewMouseRightButtonDown">
+         <ListBox x:Name="ProfilesList"
+                  ItemsSource="{Binding Profiles}"
+                  SelectedItem="{Binding SelectedProfile}"
+                  SelectionChanged="Profiles_SelectionChanged"
+                  MouseDoubleClick="ProfilesList_MouseDoubleClick"
+                  PreviewMouseRightButtonDown="ProfilesList_PreviewMouseRightButtonDown">
           <ListBox.ContextMenu>
             <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
               <MenuItem Header="{loc:Loc main.add}" Click="AddProfile_Click"
@@ -448,7 +449,7 @@
                          Foreground="{DynamicResource SecondaryTextBrush}"/>
               <TextBox x:Name="ArchiveDisplayNameBox"
                        Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Padding="4,2"
-                       Text="{Binding SelectedArchive.DisplayName, UpdateSourceTrigger=Explicit}"
+                       Text="{Binding SelectedArchive.DisplayName, UpdateSourceTrigger=PropertyChanged}"
                        GotFocus="ArchiveDisplayName_GotFocus"
                        LostFocus="ArchiveDisplayName_LostFocus"
                        KeyDown="ArchiveDisplayName_KeyDown"/>
@@ -502,13 +503,14 @@
             </Grid>
           </ScrollViewer>
         </Border>
-        <ListBox x:Name="ArchivesList"
-                 ItemsSource="{Binding Archives}" SelectedItem="{Binding SelectedArchive}"
-                 VirtualizingPanel.ScrollUnit="Pixel"
-                 HorizontalContentAlignment="Stretch"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 SelectionChanged="ArchivesList_SelectionChanged"
-                 PreviewMouseRightButtonDown="ArchivesList_PreviewMouseRightButtonDown">
+         <ListBox x:Name="ArchivesList"
+                  ItemsSource="{Binding Archives}" SelectedItem="{Binding SelectedArchive}"
+                  VirtualizingPanel.ScrollUnit="Pixel"
+                  HorizontalContentAlignment="Stretch"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                  SelectionChanged="ArchivesList_SelectionChanged"
+                  MouseDoubleClick="ArchivesList_MouseDoubleClick"
+                  PreviewMouseRightButtonDown="ArchivesList_PreviewMouseRightButtonDown">
           <ListBox.ContextMenu>
             <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
               <MenuItem Header="{loc:Loc main.restore}" Click="Restore_Click"
@@ -560,19 +562,33 @@
                         </Style>
                       </TextBlock.Style>
                     </TextBlock>
-                   <TextBlock Grid.Column="1" Text="{Binding ListTitle}" TextTrimming="CharacterEllipsis"
-                              VerticalAlignment="Center" ToolTip="{Binding Name}">
-                     <TextBlock.Style>
-                       <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-                         <Style.Triggers>
-                           <DataTrigger Binding="{Binding IsVeryFresh}" Value="True">
-                             <Setter Property="Foreground" Value="{DynamicResource ArchiveAgeFreshBrush}"/>
-                             <Setter Property="FontWeight" Value="SemiBold"/>
-                           </DataTrigger>
-                         </Style.Triggers>
-                       </Style>
-                     </TextBlock.Style>
-                   </TextBlock>
+                    <Grid Grid.Column="1" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding ListTitle}" TextTrimming="CharacterEllipsis"
+                                 VerticalAlignment="Center" ToolTip="{Binding Name}"
+                                 PreviewMouseLeftButtonDown="ArchiveListTitle_PreviewMouseLeftButtonDown">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsEditingDisplayName}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding IsVeryFresh}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource ArchiveAgeFreshBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                      <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
+                               Style="{StaticResource ArchiveListTitleBoxStyle}"
+                               ToolTip="{Binding Name}"
+                               IsVisibleChanged="ArchiveListDisplayName_IsVisibleChanged"
+                               GotFocus="ArchiveListDisplayName_GotFocus"
+                               LostFocus="ArchiveDisplayName_LostFocus"
+                               KeyDown="ArchiveDisplayName_KeyDown"/>
+                    </Grid>
                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0"
                                VerticalAlignment="Center">
                      <TextBlock Text="{Binding LastWriteTime, StringFormat={}{0:yyyy-MM-dd}}">
@@ -696,9 +712,10 @@
         </TextBlock>
         <Button DockPanel.Dock="Bottom" Content="{loc:Loc main.exit}" Height="30" Margin="0,8,0,0"
                 Click="ForceExit_Click" ToolTip="{loc:Loc main.exitTooltip}"/>
-        <ListBox x:Name="HistoryList"
-                 ItemsSource="{Binding History}"
-                 SelectionChanged="HistoryList_SelectionChanged">
+         <ListBox x:Name="HistoryList"
+                  ItemsSource="{Binding History}"
+                  SelectionChanged="HistoryList_SelectionChanged"
+                  MouseDoubleClick="HistoryList_MouseDoubleClick">
           <ListBox.Resources>
             <DataTemplate DataType="{x:Type models:RunHistoryEntry}">
               <StackPanel Margin="0,2">

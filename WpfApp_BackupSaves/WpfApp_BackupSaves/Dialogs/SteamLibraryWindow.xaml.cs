@@ -4,7 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using BackupSaves.Core.Services;
 using WpfApp_BackupSaves.Services;
-using MessageBox = System.Windows.MessageBox;
+using WpfApp_BackupSaves.Dialogs;
 
 namespace WpfApp_BackupSaves.Dialogs;
 
@@ -114,7 +114,7 @@ public partial class SteamLibraryWindow : Window
 
         if (GameList.SelectedItem is not SteamRow row)
         {
-            MessageBox.Show(this, LocalizationService.Text("profile.steamSelectRequired"),
+            AppMessageBox.Show(this, LocalizationService.Text("profile.steamSelectRequired"),
                 LocalizationService.Text("common.appName"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;

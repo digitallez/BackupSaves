@@ -401,6 +401,45 @@
     </Setter>
   </Style>
 
+  <!-- Inline archive title editor (only while IsEditingDisplayName). No hover chrome. -->
+  <Style x:Key="ArchiveListTitleBoxStyle" TargetType="TextBox">
+    <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushKey}"/>
+    <Setter Property="Padding" Value="2,1"/>
+    <Setter Property="Margin" Value="0"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+    <Setter Property="CaretBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+    <Setter Property="TextWrapping" Value="NoWrap"/>
+    <Setter Property="AcceptsReturn" Value="False"/>
+    <Setter Property="Visibility" Value="Collapsed"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Border x:Name="Bd"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  SnapsToDevicePixels="True">
+            <ScrollViewer x:Name="PART_ContentHost"
+                          Margin="{TemplateBinding Padding}"
+                          VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding IsEditingDisplayName}" Value="True">
+        <Setter Property="Visibility" Value="Visible"/>
+      </DataTrigger>
+      <DataTrigger Binding="{Binding IsVeryFresh}" Value="True">
+        <Setter Property="Foreground" Value="{DynamicResource ArchiveAgeFreshBrush}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
   <!-- Segmented Any/Yes/No filter (RadioButton group). -->
   <Style x:Key="SegmentRadioStyle" TargetType="RadioButton">
     <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>

@@ -3,11 +3,11 @@ using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using MessageBox = System.Windows.MessageBox;
 using BackupSaves.Core.IO;
 using BackupSaves.Core.Models;
 using BackupSaves.Core.Services;
 using WpfApp_BackupSaves.Services;
+using WpfApp_BackupSaves.Dialogs;
 using WinForms = System.Windows.Forms;
 
 namespace WpfApp_BackupSaves.Dialogs;
@@ -265,7 +265,7 @@ public partial class ProfileEditWindow : Window
             {
                 if (!Directory.Exists(path))
                 {
-                    MessageBox.Show(this, LocalizationService.Text("profile.errSourceMissing", path),
+                    AppMessageBox.Show(this, LocalizationService.Text("profile.errSourceMissing", path),
                         LocalizationService.Text("common.appName"),
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
@@ -282,7 +282,7 @@ public partial class ProfileEditWindow : Window
 
             if (!File.Exists(path))
             {
-                MessageBox.Show(this, LocalizationService.Text("profile.errSourceMissing", path),
+                AppMessageBox.Show(this, LocalizationService.Text("profile.errSourceMissing", path),
                     LocalizationService.Text("common.appName"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -297,7 +297,7 @@ public partial class ProfileEditWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, LocalizationService.Text("msg.explorerFailed", ex.Message),
+            AppMessageBox.Show(this, LocalizationService.Text("msg.explorerFailed", ex.Message),
                 LocalizationService.Text("common.appName"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -333,28 +333,28 @@ public partial class ProfileEditWindow : Window
     {
         if (string.IsNullOrWhiteSpace(NameBox.Text))
         {
-            MessageBox.Show(this, LocalizationService.Text("profile.errName"),
+            AppMessageBox.Show(this, LocalizationService.Text("profile.errName"),
                 LocalizationService.Text("common.appName"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(RootBox.Text))
         {
-            MessageBox.Show(this, LocalizationService.Text("profile.errRoot"),
+            AppMessageBox.Show(this, LocalizationService.Text("profile.errRoot"),
                 LocalizationService.Text("common.appName"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         if (Profile.Sources.Count == 0)
         {
-            MessageBox.Show(this, LocalizationService.Text("profile.errSources"),
+            AppMessageBox.Show(this, LocalizationService.Text("profile.errSources"),
                 LocalizationService.Text("common.appName"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         if (!int.TryParse(RetentionBox.Text, out var retention) || retention < 1)
         {
-            MessageBox.Show(this, LocalizationService.Text("profile.errRetention"),
+            AppMessageBox.Show(this, LocalizationService.Text("profile.errRetention"),
                 LocalizationService.Text("common.appName"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -363,7 +363,7 @@ public partial class ProfileEditWindow : Window
         var watchPattern = WatchProcessBox.Text?.Trim();
         if (watchEnabled && !ProcessWatchService.IsMatchPatternConfigured(watchPattern))
         {
-            MessageBox.Show(this, LocalizationService.Text("profile.errWatchProcess"),
+            AppMessageBox.Show(this, LocalizationService.Text("profile.errWatchProcess"),
                 LocalizationService.Text("common.appName"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -371,7 +371,7 @@ public partial class ProfileEditWindow : Window
 
         if (!int.TryParse(WatchProcessScanBox.Text, out var scanSec) || scanSec < 1)
         {
-            MessageBox.Show(this, LocalizationService.Text("profile.errProcessScanSec"),
+            AppMessageBox.Show(this, LocalizationService.Text("profile.errProcessScanSec"),
                 LocalizationService.Text("common.appName"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -430,7 +430,7 @@ public partial class ProfileEditWindow : Window
         {
             if (Profile.Schedule.IntervalMinutes is null or < 1)
             {
-                MessageBox.Show(this, LocalizationService.Text("profile.errInterval"),
+                AppMessageBox.Show(this, LocalizationService.Text("profile.errInterval"),
                     LocalizationService.Text("common.appName"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;

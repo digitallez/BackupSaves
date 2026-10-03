@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using BackupSaves.Core.Services;
 using WpfApp_BackupSaves.Services;
-using MessageBox = System.Windows.MessageBox;
+using WpfApp_BackupSaves.Dialogs;
 
 namespace WpfApp_BackupSaves.Dialogs;
 
@@ -113,7 +113,7 @@ public partial class ProcessPickerWindow : Window
 
         if (ProcessList.SelectedItem is not ProcessRow row)
         {
-            MessageBox.Show(this, LocalizationService.Text("process.selectRequired"),
+            AppMessageBox.Show(this, LocalizationService.Text("process.selectRequired"),
                 LocalizationService.Text("common.appName"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;

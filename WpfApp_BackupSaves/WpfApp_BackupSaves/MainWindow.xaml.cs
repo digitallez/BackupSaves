@@ -1,11 +1,10 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
-using MessageBox = System.Windows.MessageBox;
 using BackupSaves.Core.IO;
 using BackupSaves.Core.Models;
 using BackupSaves.Core.Services;
@@ -36,6 +35,9 @@ public partial class MainWindow : Window
     private int _archiveDetailLoadToken;
     private bool _suppressHistorySelection;
     private bool _editingArchiveDisplayName;
+    private ArchiveListItem? _displayNameEditTarget;
+    private DispatcherTimer? _archiveTitleEditTimer;
+    private ArchiveListItem? _pendingArchiveTitleEdit;
     private readonly IUpdateChecker _updateChecker = new GitHubReleaseUpdateChecker();
     private InAppBackupScheduler? _inAppScheduler;
     private DispatcherTimer? _profilesLiveTimer;
@@ -88,9 +90,59 @@ public partial class MainWindow : Window
 
     private void RefreshArchivesView()
     {
+        // Segment filters are Focusable=False — LostFocus may never run before this.
+        // Commit typed title first so "custom name" filter sees the new value.
+        TryCommitPendingArchiveDisplayName();
         _archivesView?.Refresh();
         RenumberVisibleArchives();
         SyncSelectedArchiveWithVisibleView();
+    }
+
+    /// <summary>
+    /// Persist in-progress archive title from the focused/detail TextBox into the model + meta file.
+    /// </summary>
+    private void TryCommitPendingArchiveDisplayName()
+    {
+        if (!_editingArchiveDisplayName)
+            return;
+
+        ArchiveListItem? archive = null;
+        string? text = null;
+
+        if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.TextBox focused)
+        {
+            if (focused.DataContext is ArchiveListItem listItem)
+            {
+                archive = listItem;
+                text = focused.Text;
+            }
+            else if (ReferenceEquals(focused, ArchiveDisplayNameBox))
+            {
+                archive = _vm.SelectedArchive ?? _displayNameEditTarget;
+                text = focused.Text;
+            }
+        }
+
+        archive ??= _displayNameEditTarget ?? _vm.SelectedArchive;
+        if (archive is null)
+            return;
+
+        if (text is null && ArchiveDisplayNameBox is not null
+            && (ReferenceEquals(_displayNameEditTarget, archive)
+                || ReferenceEquals(_vm.SelectedArchive, archive)))
+            text = ArchiveDisplayNameBox.Text;
+
+        text ??= archive.DisplayName;
+
+        try
+        {
+            archive.DisplayName = text ?? "";
+            ArchiveMetaStore.SaveDisplayName(archive.Path, archive.DisplayName);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Failed to save archive display name", ex);
+        }
     }
 
     /// <summary>
@@ -359,7 +411,7 @@ public partial class MainWindow : Window
             AppLog.Default.Error("Update", "Local archive update failed", ex);
             _reallyClose = false;
             _vm.IsBusy = false;
-            MessageBox.Show(this,
+            AppMessageBox.Show(this,
                 LocalizationService.Text("update.failed", ex.Message),
                 LocalizationService.Text("update.title"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
@@ -450,7 +502,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLog.Default.Error("Update", "Update now failed", ex);
-            MessageBox.Show(this, LocalizationService.Text("update.failed", ex.Message),
+            AppMessageBox.Show(this, LocalizationService.Text("update.failed", ex.Message),
                 LocalizationService.Text("update.title"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
             _vm.IsBusy = false;
@@ -471,14 +523,14 @@ public partial class MainWindow : Window
             await _settings.SaveAsync(_app);
             AppLog.Default.Info("Update", $"Deferred update ready: {release.Version} @ {zip}");
             _vm.Status = LocalizationService.Text("update.statusDeferredReady", release.Version);
-            MessageBox.Show(this,
+            AppMessageBox.Show(this,
                 LocalizationService.Text("update.deferredReady", release.Version),
                 LocalizationService.Text("update.title"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             AppLog.Default.Error("Update", "Deferred download failed", ex);
-            MessageBox.Show(this, LocalizationService.Text("update.downloadFailed", ex.Message),
+            AppMessageBox.Show(this, LocalizationService.Text("update.downloadFailed", ex.Message),
                 LocalizationService.Text("update.title"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -520,7 +572,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLog.Default.Error("App", "Open logs folder failed", ex);
-            MessageBox.Show(this, LocalizationService.Text("msg.logsOpenFailed", ex.Message),
+            AppMessageBox.Show(this, LocalizationService.Text("msg.logsOpenFailed", ex.Message),
                 LocalizationService.Text("msg.logsTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -819,7 +871,7 @@ public partial class MainWindow : Window
         if (!GameLaunchService.TryStart(command, out var error))
         {
             AppLog.Default.Error("Launch", error ?? command);
-            MessageBox.Show(this, error ?? LocalizationService.Text("profile.launchFailed", command),
+            AppMessageBox.Show(this, error ?? LocalizationService.Text("profile.launchFailed", command),
                 LocalizationService.Text("common.appName"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -1193,7 +1245,10 @@ public partial class MainWindow : Window
         _vm.Status = LocalizationService.Text("status.profileCreated", dlg.Profile.Name);
     }
 
-    private async void EditProfile_Click(object sender, RoutedEventArgs e)
+    private async void EditProfile_Click(object sender, RoutedEventArgs e) =>
+        await EditSelectedProfileAsync();
+
+    private async Task EditSelectedProfileAsync()
     {
         if (_vm.SelectedProfile is null) return;
         var dlg = new ProfileEditWindow(_vm.SelectedProfile.Profile) { Owner = this };
@@ -1217,7 +1272,7 @@ public partial class MainWindow : Window
     {
         if (_vm.SelectedProfile is null) return;
         var p = _vm.SelectedProfile.Profile;
-        if (MessageBox.Show(this, LocalizationService.Text("msg.deleteProfile", p.Name),
+        if (AppMessageBox.Show(this, LocalizationService.Text("msg.deleteProfile", p.Name),
                 LocalizationService.Text("common.appName"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
@@ -1252,7 +1307,7 @@ public partial class MainWindow : Window
                     ? LocalizationService.Text("status.backupOk", result.ArchivePath)
                     : LocalizationService.Text("status.backupError", result.ErrorMessage);
             if (!result.Success)
-                MessageBox.Show(this, result.ErrorMessage, LocalizationService.Text("msg.backupTitle"),
+                AppMessageBox.Show(this, result.ErrorMessage, LocalizationService.Text("msg.backupTitle"),
                     MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -1283,8 +1338,8 @@ public partial class MainWindow : Window
     {
         if (_vm.SelectedArchive is null || _vm.IsBusy) return;
 
-        var confirm = MessageBox.Show(this,
-            LocalizationService.Text("msg.restoreConfirm", _vm.SelectedArchive.Name),
+        var confirm = AppMessageBox.Show(this,
+            LocalizationService.Text("msg.restoreConfirm", _vm.SelectedArchive.ListTitle),
             LocalizationService.Text("msg.restoreTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes)
         {
@@ -1301,7 +1356,7 @@ public partial class MainWindow : Window
             if (result.Success)
             {
                 _vm.Status = LocalizationService.Text("status.restored", result.RestoredCount);
-                MessageBox.Show(this, LocalizationService.Text("msg.restoreOk", result.RestoredCount),
+                AppMessageBox.Show(this, LocalizationService.Text("msg.restoreOk", result.RestoredCount),
                     LocalizationService.Text("msg.restoreTitle"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -1311,7 +1366,7 @@ public partial class MainWindow : Window
                 if (result.Errors.Count > 0)
                     details += "\n\n" + string.Join("\n", result.Errors.Take(15).Select(x => $"{x.SourcePath}: {x.Message}"));
                 _vm.Status = details.Split('\n')[0];
-                MessageBox.Show(this, details, LocalizationService.Text("msg.restoreErrors"),
+                AppMessageBox.Show(this, details, LocalizationService.Text("msg.restoreErrors"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -1391,6 +1446,92 @@ public partial class MainWindow : Window
     private void ArchiveDisplayName_GotFocus(object sender, RoutedEventArgs e)
     {
         _editingArchiveDisplayName = true;
+        _displayNameEditTarget = _vm.SelectedArchive;
+    }
+
+    private void ArchiveListDisplayName_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _editingArchiveDisplayName = true;
+        if (sender is not System.Windows.Controls.TextBox { DataContext: ArchiveListItem item })
+            return;
+
+        _displayNameEditTarget = item;
+        item.IsEditingDisplayName = true;
+        if (!ReferenceEquals(_vm.SelectedArchive, item))
+            _vm.SelectedArchive = item;
+    }
+
+    private void ArchiveListDisplayName_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true && sender is System.Windows.Controls.TextBox tb)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (!tb.IsVisible) return;
+                tb.Focus();
+                tb.SelectAll();
+            }, DispatcherPriority.Input);
+        }
+    }
+
+    private void ArchiveListTitle_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ArchiveListItem item })
+            return;
+
+        // First click selects the row (ListBox handles it). Second separate click → rename.
+        if (!ReferenceEquals(_vm.SelectedArchive, item) || item.IsEditingDisplayName)
+            return;
+
+        CancelPendingArchiveTitleEdit();
+        _pendingArchiveTitleEdit = item;
+        _archiveTitleEditTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(System.Windows.Forms.SystemInformation.DoubleClickTime + 50)
+        };
+        _archiveTitleEditTimer.Tick += ArchiveTitleEditTimer_Tick;
+        _archiveTitleEditTimer.Start();
+    }
+
+    private void ArchiveTitleEditTimer_Tick(object? sender, EventArgs e)
+    {
+        var item = _pendingArchiveTitleEdit;
+        CancelPendingArchiveTitleEdit();
+        if (item is null || !ReferenceEquals(_vm.SelectedArchive, item))
+            return;
+        BeginArchiveListTitleEdit(item);
+    }
+
+    private void CancelPendingArchiveTitleEdit()
+    {
+        if (_archiveTitleEditTimer is not null)
+        {
+            _archiveTitleEditTimer.Stop();
+            _archiveTitleEditTimer.Tick -= ArchiveTitleEditTimer_Tick;
+            _archiveTitleEditTimer = null;
+        }
+
+        _pendingArchiveTitleEdit = null;
+    }
+
+    private void BeginArchiveListTitleEdit(ArchiveListItem item)
+    {
+        if (_displayNameEditTarget is { } prev && !ReferenceEquals(prev, item))
+            prev.IsEditingDisplayName = false;
+
+        _editingArchiveDisplayName = true;
+        _displayNameEditTarget = item;
+        if (!ReferenceEquals(_vm.SelectedArchive, item))
+            _vm.SelectedArchive = item;
+        item.IsEditingDisplayName = true;
+    }
+
+    private void EndArchiveListTitleEdit(ArchiveListItem? item)
+    {
+        if (item is not null)
+            item.IsEditingDisplayName = false;
+        if (_displayNameEditTarget is { } other && !ReferenceEquals(other, item))
+            other.IsEditingDisplayName = false;
     }
 
     private void ArchiveDisplayName_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -1409,31 +1550,80 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (_vm.SelectedArchive is null)
-                return;
-
-            var archive = _vm.SelectedArchive;
-            // LostFocus often runs before binding source update — take text from the box.
+            ArchiveListItem? archive = null;
             if (sender is System.Windows.Controls.TextBox tb)
             {
                 tb.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
-                archive.DisplayName = tb.Text ?? "";
+                if (tb.DataContext is ArchiveListItem listItem)
+                    archive = listItem;
+                else
+                    archive = _vm.SelectedArchive ?? _displayNameEditTarget;
+
+                if (archive is not null)
+                    archive.DisplayName = tb.Text ?? "";
+            }
+            else
+            {
+                archive = _vm.SelectedArchive ?? _displayNameEditTarget;
             }
 
+            if (archive is null)
+                return;
+
             ArchiveMetaStore.SaveDisplayName(archive.Path, archive.DisplayName);
-            RefreshArchivesView();
         }
         catch (Exception ex)
         {
             AppLog.Default.Error("App", "Failed to save archive display name", ex);
-            MessageBox.Show(this, LocalizationService.Text("msg.saveArchiveNameFailed", ex.Message),
+            AppMessageBox.Show(this, LocalizationService.Text("msg.saveArchiveNameFailed", ex.Message),
                 LocalizationService.Text("msg.archivesTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
+            EndArchiveListTitleEdit(_displayNameEditTarget);
+            if (sender is System.Windows.Controls.TextBox { DataContext: ArchiveListItem listItem })
+                listItem.IsEditingDisplayName = false;
             _editingArchiveDisplayName = false;
+            _displayNameEditTarget = null;
         }
+
+        // After flags cleared — refilter/renumber with the committed title.
+        RefreshArchivesView();
+    }
+
+    private async void ArchivesList_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        CancelPendingArchiveTitleEdit();
+        if (_displayNameEditTarget is { } editing)
+        {
+            editing.IsEditingDisplayName = false;
+            _editingArchiveDisplayName = false;
+            _displayNameEditTarget = null;
+        }
+
+        if (_vm.SelectedArchive is null || _vm.IsBusy)
+            return;
+
+        await RestoreSelectedArchiveAsync();
+    }
+
+    private async void HistoryList_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (HistoryList.SelectedItem is not RunHistoryEntry entry || _vm.IsBusy)
+            return;
+
+        if (!TryNavigateToHistoryArchive(entry))
+            return;
+
+        await RestoreSelectedArchiveAsync();
+    }
+
+    private async void ProfilesList_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_vm.SelectedProfile is null)
+            return;
+        await EditSelectedProfileAsync();
     }
 
     private void ArchiveKeepForever_Click(object sender, RoutedEventArgs e)
@@ -1454,7 +1644,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLog.Default.Error("App", "Failed to save archive keep-forever flag", ex);
-            MessageBox.Show(this, LocalizationService.Text("msg.saveArchiveKeepFailed", ex.Message),
+            AppMessageBox.Show(this, LocalizationService.Text("msg.saveArchiveKeepFailed", ex.Message),
                 LocalizationService.Text("msg.archivesTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -1481,20 +1671,23 @@ public partial class MainWindow : Window
         if (HistoryList.SelectedItem is not RunHistoryEntry entry)
             return;
 
-        NavigateToHistoryArchive(entry);
+        TryNavigateToHistoryArchive(entry);
     }
 
-    private void NavigateToHistoryArchive(RunHistoryEntry entry)
+    private bool TryNavigateToHistoryArchive(RunHistoryEntry entry)
     {
         if (_editingArchiveDisplayName)
-            return;
+            return false;
 
         var profileItem = _vm.Profiles.FirstOrDefault(p => p.Id == entry.ProfileId);
         if (profileItem is not null && !ReferenceEquals(_vm.SelectedProfile, profileItem))
             _vm.SelectedProfile = profileItem;
 
         if (string.IsNullOrWhiteSpace(entry.ArchivePath))
-            return;
+        {
+            _vm.SelectedArchive = null;
+            return false;
+        }
 
         var match = FindArchiveByPath(entry.ArchivePath);
         if (match is null)
@@ -1503,8 +1696,19 @@ public partial class MainWindow : Window
             match = FindArchiveByPath(entry.ArchivePath);
         }
 
-        if (match is not null && !ReferenceEquals(_vm.SelectedArchive, match))
+        // Only select when the archive is actually visible in the filtered archives list.
+        if (match is null || !_vm.MatchesArchiveFilter(match))
+        {
+            if (_vm.SelectedArchive is not null)
+                _vm.SelectedArchive = null;
+            return false;
+        }
+
+        if (!ReferenceEquals(_vm.SelectedArchive, match))
             _vm.SelectedArchive = match;
+
+        ArchivesList.ScrollIntoView(match);
+        return true;
     }
 
     private ArchiveListItem? FindArchiveByPath(string archivePath)
@@ -1522,7 +1726,7 @@ public partial class MainWindow : Window
         var path = _vm.SelectedArchive.Path;
         if (!File.Exists(path))
         {
-            MessageBox.Show(this, LocalizationService.Text("msg.archiveMissing"),
+            AppMessageBox.Show(this, LocalizationService.Text("msg.archiveMissing"),
                 LocalizationService.Text("msg.archivesTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
             RefreshArchives();
             return;
@@ -1541,7 +1745,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLog.Default.Error("App", "Reveal in explorer failed", ex);
-            MessageBox.Show(this, LocalizationService.Text("msg.explorerFailed", ex.Message),
+            AppMessageBox.Show(this, LocalizationService.Text("msg.explorerFailed", ex.Message),
                 LocalizationService.Text("msg.archivesTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -1553,7 +1757,7 @@ public partial class MainWindow : Window
 
         var name = _vm.SelectedArchive.Name;
         var path = _vm.SelectedArchive.Path;
-        if (MessageBox.Show(this,
+        if (AppMessageBox.Show(this,
                 LocalizationService.Text("msg.deleteArchive", name),
                 LocalizationService.Text("msg.deleteArchiveTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
@@ -1570,7 +1774,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLog.Default.Error("App", $"Delete archive failed: \"{path}\"", ex);
-            MessageBox.Show(this, LocalizationService.Text("msg.deleteArchiveFailed", ex.Message),
+            AppMessageBox.Show(this, LocalizationService.Text("msg.deleteArchiveFailed", ex.Message),
                 LocalizationService.Text("msg.deleteArchiveTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }

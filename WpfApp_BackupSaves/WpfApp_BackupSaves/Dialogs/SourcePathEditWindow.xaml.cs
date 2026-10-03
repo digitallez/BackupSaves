@@ -1,7 +1,7 @@
 using System.Windows;
 using BackupSaves.Core.Services;
 using WpfApp_BackupSaves.Services;
-using MessageBox = System.Windows.MessageBox;
+using WpfApp_BackupSaves.Dialogs;
 
 namespace WpfApp_BackupSaves.Dialogs;
 
@@ -27,7 +27,7 @@ public partial class SourcePathEditWindow : Window
         PathText = PathBox.Text?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(PathText))
         {
-            MessageBox.Show(this, LocalizationService.Text("profile.errSourcePathEmpty"),
+            AppMessageBox.Show(this, LocalizationService.Text("profile.errSourcePathEmpty"),
                 LocalizationService.Text("profile.editPathTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
