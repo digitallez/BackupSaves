@@ -38,4 +38,13 @@ public sealed class UiSettings
 
     /// <summary>Whether the main window was maximized.</summary>
     public bool WindowMaximized { get; set; }
+
+    /// <summary>
+    /// Close button behavior. Ask = show dialog; otherwise apply without asking
+    /// (still forced when an update option is available).
+    /// </summary>
+    public CloseActionPreference CloseAction { get; set; } = CloseActionPreference.Ask;
+
+    /// <summary>True after the first-run install/use-here prompt was answered.</summary>
+    public bool InstallPromptCompleted { get; set; }
 }

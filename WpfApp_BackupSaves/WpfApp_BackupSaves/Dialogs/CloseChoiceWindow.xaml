@@ -30,6 +30,10 @@
               Height="36" Margin="0,0,0,8"
               Visibility="Collapsed"
               Click="UpdateFromArchive_Click"/>
+      <CheckBox x:Name="RememberCheck"
+                Content="{loc:Loc close.remember}"
+                Margin="0,4,0,12"
+                ToolTip="{loc:Loc close.rememberTip}"/>
       <Button Content="{loc:Loc common.cancel}" Height="36"
               Click="Cancel_Click" IsCancel="True"/>
     </StackPanel>

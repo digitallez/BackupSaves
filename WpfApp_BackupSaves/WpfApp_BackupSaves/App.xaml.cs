@@ -1,6 +1,8 @@
-﻿using System.Windows;
+﻿using System.IO;
+using System.Windows;
 using BackupSaves.Core.Models;
 using BackupSaves.Core.Services;
+using WpfApp_BackupSaves.Dialogs;
 using WpfApp_BackupSaves.Services;
 
 namespace WpfApp_BackupSaves;
@@ -45,9 +47,11 @@ public partial class App : System.Windows.Application
         _guiMode = true;
         AppLog.Default.Info("App", $"GUI start exe=\"{Environment.ProcessPath}\" pid={Environment.ProcessId}");
 
+        var settingsStore = new SettingsStore();
+        AppSettings settings;
         try
         {
-            var settings = new SettingsStore().Load();
+            settings = settingsStore.Load();
             ThemeManager.Apply(settings.Ui.Theme);
             var lang = LocalizationService.Instance.ResolveInitialLanguage(settings.Ui.Language);
             LocalizationService.Instance.SetLanguage(lang);
@@ -56,10 +60,14 @@ public partial class App : System.Windows.Application
         catch (Exception ex)
         {
             AppLog.Default.Error("App", "Failed to load theme, fallback Dark", ex);
+            settings = new AppSettings();
             ThemeManager.Apply(AppTheme.Dark);
             var lang = LocalizationService.Instance.ResolveInitialLanguage(null);
             LocalizationService.Instance.SetLanguage(lang);
         }
+
+        if (!TryHandleFirstRunInstall(settingsStore, settings))
+            return;
 
         var window = new MainWindow();
         MainWindow = window;
@@ -67,6 +75,85 @@ public partial class App : System.Windows.Application
 
         _singleInstance?.StartListening(() =>
             Dispatcher.BeginInvoke(new Action(ActivateExistingMainWindow)));
+    }
+
+    /// <summary>
+    /// First-run install prompt. Returns false when this process should stop
+    /// (installed copy launched, or user closed the prompt without a choice).
+    /// </summary>
+    private bool TryHandleFirstRunInstall(ISettingsStore store, AppSettings settings)
+    {
+        try
+        {
+            if (AppInstallService.IsRunningFromInstallDirectory())
+            {
+                if (!settings.Ui.InstallPromptCompleted)
+                {
+                    settings.Ui.InstallPromptCompleted = true;
+                    store.Save(settings);
+                }
+
+                return true;
+            }
+
+            // Existing users (settings.json already present) — don't re-prompt after upgrade.
+            if (!settings.Ui.InstallPromptCompleted && File.Exists(store.SettingsPath))
+            {
+                settings.Ui.InstallPromptCompleted = true;
+                store.Save(settings);
+                return true;
+            }
+
+            if (settings.Ui.InstallPromptCompleted)
+                return true;
+
+            var dlg = new FirstRunInstallWindow();
+            var result = dlg.ShowDialog();
+            if (result != true)
+            {
+                // Closed via title-bar X — treat as "use current folder".
+                settings.Ui.InstallPromptCompleted = true;
+                store.Save(settings);
+                return true;
+            }
+
+            if (!dlg.InstallChosen)
+            {
+                settings.Ui.InstallPromptCompleted = true;
+                store.Save(settings);
+                AppLog.Default.Info("Install", "First-run: user kept current folder");
+                return true;
+            }
+
+            AppInstallService.Install(createDesktopShortcut: true);
+            settings.Ui.InstallPromptCompleted = true;
+            store.Save(settings);
+            ReleaseSingleInstanceForRelaunch();
+            AppInstallService.LaunchInstalledAndExit();
+            return false;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Install", "First-run install prompt failed", ex);
+            try
+            {
+                settings.Ui.InstallPromptCompleted = true;
+                store.Save(settings);
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>Release the GUI single-instance mutex before launching another copy.</summary>
+    internal void ReleaseSingleInstanceForRelaunch()
+    {
+        _singleInstance?.Dispose();
+        _singleInstance = null;
     }
 
     protected override void OnExit(ExitEventArgs e)

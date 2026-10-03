@@ -283,6 +283,8 @@ public partial class MainWindow : Window
         if (_tray is null) return;
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add(LocalizationService.Text("tray.open"), null, (_, _) => RestoreFromTray());
+        menu.Items.Add(LocalizationService.Text("tray.settings"), null, (_, _) =>
+            Dispatcher.Invoke(OpenSettingsDialog));
         menu.Items.Add(LocalizationService.Text("tray.resetPosition"), null, (_, _) =>
             Dispatcher.Invoke(ResetWindowPlacementFromTray));
         menu.Items.Add(new WinForms.ToolStripSeparator());
@@ -348,7 +350,7 @@ public partial class MainWindow : Window
             if (TryOfferLocalArchiveUpdateAtStartup())
                 return;
 #endif
-            _ = CheckForUpdatesAsync();
+            _ = CheckForUpdatesAsync(fromUser: false);
         }
     }
 
@@ -418,15 +420,28 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task CheckForUpdatesAsync()
+    private async Task CheckForUpdatesAsync(bool fromUser = false)
     {
         try
         {
             var release = await _updateChecker.GetNewerReleaseAsync();
             if (release is null)
-                return;
+            {
+                if (fromUser)
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                        AppMessageBox.Show(this,
+                            LocalizationService.Text("settings.upToDate", AppVersion.Current),
+                            LocalizationService.Text("settings.checkUpdates"),
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information));
+                }
 
-            if (string.Equals(_app.Ui.SkippedUpdateVersion, release.Version, StringComparison.OrdinalIgnoreCase))
+                return;
+            }
+
+            if (!fromUser
+                && string.Equals(_app.Ui.SkippedUpdateVersion, release.Version, StringComparison.OrdinalIgnoreCase))
             {
                 AppLog.Default.Info("Update", $"Skipped version {release.Version} (user choice)");
                 return;
@@ -438,6 +453,16 @@ public partial class MainWindow : Window
                 && File.Exists(_app.Ui.PendingUpdateZipPath))
             {
                 _vm.Status = LocalizationService.Text("update.statusWillInstall", release.Version);
+                if (fromUser)
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                        AppMessageBox.Show(this,
+                            LocalizationService.Text("update.statusWillInstall", release.Version),
+                            LocalizationService.Text("settings.checkUpdates"),
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information));
+                }
+
                 return;
             }
 
@@ -446,7 +471,7 @@ public partial class MainWindow : Window
             {
                 var dlg = new UpdateAvailableWindow(AppVersion.Current, release.Version, release.ReleaseNotes)
                 {
-                    Owner = this
+                    Owner = OwnerForDialogs()
                 };
                 dlg.ShowDialog();
                 choice = dlg.Choice;
@@ -477,7 +502,27 @@ public partial class MainWindow : Window
         {
             AppLog.Default.Error("Update", "Update check failed", ex);
             _vm.Status = LocalizationService.Text("update.statusCheckFailed");
+            if (fromUser)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                    AppMessageBox.Show(this,
+                        LocalizationService.Text("update.statusCheckFailed"),
+                        LocalizationService.Text("settings.checkUpdates"),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning));
+            }
         }
+    }
+
+    private Window OwnerForDialogs()
+    {
+        foreach (Window w in System.Windows.Application.Current.Windows)
+        {
+            if (w is SettingsWindow { IsVisible: true })
+                return w;
+        }
+
+        return this;
     }
 
     private async Task DownloadAndApplyNowAsync(ReleaseInfo release)
@@ -1848,11 +1893,35 @@ public partial class MainWindow : Window
 
     private void RestoreFromTray() => BringToForeground();
 
-    private void ForceExit_Click(object sender, RoutedEventArgs e)
+    private void OpenSettingsDialog()
     {
-        AppLog.Default.Info("App", "Force exit (History button)");
-        _reallyClose = true;
-        Close();
+        RestoreFromTray();
+        var dlg = new SettingsWindow(
+            _app,
+            _settings,
+            openLogs: () => OpenLogs_Click(this, new RoutedEventArgs()),
+            checkUpdates: () => CheckForUpdatesAsync(fromUser: true),
+            onThemeChanged: () =>
+            {
+                UpdateThemeToggleCaption();
+                RebuildTrayMenu();
+                RefreshArchiveAgeDots();
+            },
+            onLanguageChanged: id =>
+            {
+                _vm.SelectLanguageSilent(id);
+                RebuildTrayMenu();
+                UpdateThemeToggleCaption();
+                RefreshProfilesLive();
+                RefreshHistoryLoadMoreCaption();
+                UpdateHistoryFilterDisplay();
+            })
+        {
+            Owner = this
+        };
+        dlg.ShowDialog();
+        RebuildTrayMenu();
+        UpdateThemeToggleCaption();
     }
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -1866,16 +1935,48 @@ public partial class MainWindow : Window
 
         // Cannot Close() from inside Closing — ask, then either keep Cancel or allow this close.
         e.Cancel = true;
+
+        var forceAsk = CloseChoiceWindow.ShouldForceShowDialog(_app);
+        var preference = _app.Ui.CloseAction;
+        if (!forceAsk && preference == CloseActionPreference.HideToTray)
+        {
+            ApplyHideToTray();
+            return;
+        }
+
+        if (!forceAsk && preference == CloseActionPreference.Exit)
+        {
+            AppLog.Default.Info("App", "Exit via remembered preference");
+            _reallyClose = true;
+            e.Cancel = false;
+            CleanupOnExit();
+            TryApplyPendingUpdateOnExit();
+            return;
+        }
+
         var dlg = new CloseChoiceWindow { Owner = this };
         dlg.ShowDialog();
+
+        if (dlg.RememberChoice
+            && (dlg.Choice is CloseChoice.HideToTray or CloseChoice.Exit))
+        {
+            _app.Ui.CloseAction = dlg.Choice == CloseChoice.HideToTray
+                ? CloseActionPreference.HideToTray
+                : CloseActionPreference.Exit;
+            try
+            {
+                _settings.Save(_app);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Default.Error("Settings", "Failed to save close preference", ex);
+            }
+        }
 
         switch (dlg.Choice)
         {
             case CloseChoice.HideToTray:
-                AppLog.Default.Info("App", "User hid app to tray");
-                SaveWindowPlacement();
-                Hide();
-                _tray?.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.running"), WinForms.ToolTipIcon.Info);
+                ApplyHideToTray();
                 break;
             case CloseChoice.Exit:
                 AppLog.Default.Info("App", "User confirmed exit");
@@ -1897,6 +1998,14 @@ public partial class MainWindow : Window
                 AppLog.Default.Info("App", "Close cancelled");
                 break;
         }
+    }
+
+    private void ApplyHideToTray()
+    {
+        AppLog.Default.Info("App", "User hid app to tray");
+        SaveWindowPlacement();
+        Hide();
+        _tray?.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.running"), WinForms.ToolTipIcon.Info);
     }
 
     private void CleanupOnExit()

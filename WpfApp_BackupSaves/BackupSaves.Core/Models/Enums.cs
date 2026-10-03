@@ -27,3 +27,12 @@ public enum RunTrigger
     /// <summary>Periodic backup while the GUI app is running (Task Scheduler off).</summary>
     InApp
 }
+
+/// <summary>What happens when the user closes the main window.</summary>
+public enum CloseActionPreference
+{
+    /// <summary>Show the close-choice dialog every time.</summary>
+    Ask = 0,
+    HideToTray = 1,
+    Exit = 2
+}
