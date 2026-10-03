@@ -1,0 +1,301 @@
+<Window x:Class="WpfApp_BackupSaves.Dialogs.ProfileEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:WpfApp_BackupSaves.Controls"
+        xmlns:loc="clr-namespace:WpfApp_BackupSaves.Markup"
+         Title="{loc:Loc profile.title}" Height="740" Width="640"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
+        Icon="pack://application:,,,/Assets/app.ico"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource PrimaryTextBrush}">
+  <DockPanel>
+    <controls:CustomTitleBar DockPanel.Dock="Top" ShowMaximize="True"/>
+
+    <DockPanel Margin="16">
+      <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <Button Content="{loc:Loc common.save}" Width="110" Height="32" Margin="0,0,8,0" IsDefault="True" Click="Save_Click"/>
+        <Button Content="{loc:Loc common.cancel}" Width="110" Height="32" IsCancel="True" Click="Cancel_Click"/>
+      </StackPanel>
+
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="140"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Text="{loc:Loc profile.name}" VerticalAlignment="Center"/>
+          <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,4" Height="28"
+                   VerticalContentAlignment="Center"/>
+
+          <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Loc profile.backupFolder}" VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="300" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.backupFolderTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+          <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,4">
+            <Button DockPanel.Dock="Right" Content="…" Width="36" Height="28" Margin="6,0,0,0" Click="BrowseRoot_Click"/>
+            <TextBox x:Name="RootBox" Height="28" VerticalContentAlignment="Center"/>
+          </DockPanel>
+
+          <TextBlock Text="{loc:Loc profile.format}" Grid.Row="2" VerticalAlignment="Center"/>
+          <ComboBox x:Name="FormatBox" Grid.Row="2" Grid.Column="1" Margin="0,4" Height="28"
+                    SelectedIndex="0">
+            <ComboBoxItem Content="{loc:Loc profile.format7z}" Tag="SevenZip"/>
+            <ComboBoxItem Content="{loc:Loc profile.formatZip}" Tag="Zip"/>
+          </ComboBox>
+
+          <StackPanel Grid.Row="3" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Loc profile.retention}" VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="280" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.retentionTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+          <TextBox x:Name="RetentionBox" Grid.Row="3" Grid.Column="1" Margin="0,4"
+                   Width="110" Height="28" HorizontalAlignment="Left" Text="10"
+                   TextAlignment="Center" VerticalContentAlignment="Center"/>
+
+          <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,4,0,4" Orientation="Horizontal">
+            <CheckBox x:Name="ChecksumSkipBox"
+                      Content="{loc:Loc profile.checksumSkip}"
+                      VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.checksumTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+
+          <StackPanel Grid.Row="5" Grid.Column="1" Margin="0,8,0,4" Orientation="Horizontal">
+            <CheckBox x:Name="WatchProcessEnabled"
+                      Content="{loc:Loc profile.watchProcess}"
+                      VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.watchProcessTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+
+          <StackPanel Grid.Row="6" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Loc profile.processExe}" VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.processExeTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+          <DockPanel Grid.Row="6" Grid.Column="1" Margin="0,4">
+            <Button DockPanel.Dock="Right" Content="{loc:Loc profile.processes}" Width="90" Height="28" Margin="6,0,0,0"
+                    Click="PickProcess_Click"/>
+            <Button DockPanel.Dock="Right" Content="…" Width="36" Height="28" Margin="6,0,0,0"
+                    Click="BrowseExe_Click"/>
+            <TextBox x:Name="WatchProcessBox" Height="28" VerticalContentAlignment="Center"/>
+          </DockPanel>
+
+          <StackPanel Grid.Row="7" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Loc profile.launch}" VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.launchTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+          <DockPanel Grid.Row="7" Grid.Column="1" Margin="0,4">
+            <Button DockPanel.Dock="Right" Content="{loc:Loc profile.steam}" Width="90" Height="28" Margin="6,0,0,0"
+                    Click="PickSteam_Click"/>
+            <Button DockPanel.Dock="Right" Content="…" Width="36" Height="28" Margin="6,0,0,0"
+                    Click="BrowseLaunch_Click"/>
+            <TextBox x:Name="LaunchBox" Height="28" VerticalContentAlignment="Center"/>
+          </DockPanel>
+
+          <StackPanel Grid.Row="8" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Loc profile.processScanSec}" VerticalAlignment="Center"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.processScanSecTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+          <TextBox x:Name="WatchProcessScanBox" Grid.Row="8" Grid.Column="1" Margin="0,4"
+                   Width="110" Height="28" HorizontalAlignment="Left" Text="10"
+                   TextAlignment="Center" VerticalContentAlignment="Center"/>
+
+          <CheckBox x:Name="ScheduleEnabled" Grid.Row="9" Grid.Column="1"
+                    Content="{loc:Loc profile.scheduleTask}" Margin="0,8,0,4"
+                    VerticalAlignment="Center"
+                    Checked="ScheduleMode_Changed" Unchecked="ScheduleMode_Changed"/>
+
+          <StackPanel Grid.Row="10" Grid.Column="1" Margin="0,0,0,4" Orientation="Horizontal">
+            <CheckBox x:Name="InAppScheduleEnabled"
+                      Content="{loc:Loc profile.inAppSchedule}"
+                      VerticalAlignment="Center"
+                      Checked="ScheduleMode_Changed" Unchecked="ScheduleMode_Changed"/>
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    Background="{DynamicResource SecondaryTextBrush}"
+                    VerticalAlignment="Center" Cursor="Help"
+                    ToolTipService.InitialShowDelay="200"
+                    ToolTipService.ShowDuration="20000">
+              <Border.ToolTip>
+                <ToolTip>
+                  <TextBlock MaxWidth="300" TextWrapping="Wrap"
+                             Text="{loc:Loc profile.inAppScheduleTip}"/>
+                </ToolTip>
+              </Border.ToolTip>
+              <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontStyle="Italic"
+                         Foreground="{DynamicResource WindowBackgroundBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-1,0,0"/>
+            </Border>
+          </StackPanel>
+
+          <TextBlock Text="{loc:Loc profile.schedule}" Grid.Row="11" VerticalAlignment="Center"/>
+          <StackPanel Grid.Row="11" Grid.Column="1" Margin="0,4" Orientation="Horizontal" VerticalAlignment="Center">
+            <ComboBox x:Name="ScheduleKindBox" Width="110" Height="28" SelectedIndex="0"
+                      VerticalAlignment="Center">
+              <ComboBoxItem Content="Daily" Tag="Daily"/>
+              <ComboBoxItem Content="Weekly" Tag="Weekly"/>
+              <ComboBoxItem Content="OnLogon" Tag="OnLogon"/>
+              <ComboBoxItem Content="Interval" Tag="Interval"/>
+            </ComboBox>
+            <TextBlock Text="{loc:Loc profile.time}" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <TextBox x:Name="TimeBox" Width="70" Height="28" Text="02:00"
+                     TextAlignment="Center" VerticalContentAlignment="Center"
+                     VerticalAlignment="Center"/>
+            <TextBlock Text="{loc:Loc profile.intervalMin}" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <TextBox x:Name="IntervalBox" Width="60" Height="28" Text="60"
+                     TextAlignment="Center" VerticalContentAlignment="Center"
+                     VerticalAlignment="Center"/>
+          </StackPanel>
+
+          <TextBlock Text="{loc:Loc profile.sources}" Grid.Row="12" Margin="0,12,0,4" FontWeight="SemiBold" Grid.ColumnSpan="2"/>
+
+          <DockPanel Grid.Row="13" Grid.ColumnSpan="2" Margin="0,0,0,6">
+            <Button DockPanel.Dock="Right" Content="{loc:Loc profile.addFile}" Width="80" Height="28" Margin="6,0,0,0" Click="AddFile_Click"/>
+            <Button DockPanel.Dock="Right" Content="{loc:Loc profile.addFolder}" Width="80" Height="28" Click="AddFolder_Click"/>
+            <Button DockPanel.Dock="Right" Content="{loc:Loc profile.remove}" Width="80" Height="28" Margin="0,0,6,0" Click="RemoveSource_Click"/>
+            <TextBlock Text="{loc:Loc profile.sourcesHint}" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
+          </DockPanel>
+
+          <ListBox x:Name="SourcesList" Grid.Row="14" Grid.ColumnSpan="2" MinHeight="110"
+                   DisplayMemberPath="Path"
+                   MouseDoubleClick="SourcesList_MouseDoubleClick"
+                   PreviewMouseRightButtonDown="SourcesList_PreviewMouseRightButtonDown"
+                   KeyDown="SourcesList_KeyDown">
+            <ListBox.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="{loc:Loc profile.openInExplorer}" Click="OpenSourceInExplorer_Click"/>
+                <MenuItem Header="{loc:Loc profile.editPath}" Click="EditSourcePath_Click"/>
+                <MenuItem Header="{loc:Loc profile.copyPath}" Click="CopySourcePath_Click"/>
+                <Separator/>
+                <MenuItem Header="{loc:Loc profile.addFolder}" Click="AddFolder_Click"/>
+                <MenuItem Header="{loc:Loc profile.addFile}" Click="AddFile_Click"/>
+                <Separator/>
+                <MenuItem Header="{loc:Loc profile.remove}" Click="RemoveSource_Click"/>
+              </ContextMenu>
+            </ListBox.ContextMenu>
+          </ListBox>
+        </Grid>
+      </ScrollViewer>
+    </DockPanel>
+  </DockPanel>
+</Window>

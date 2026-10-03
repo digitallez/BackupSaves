@@ -1,0 +1,1755 @@
+﻿using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using System.Windows;
+using System.Windows.Data;
+using System.Windows.Threading;
+using MessageBox = System.Windows.MessageBox;
+using BackupSaves.Core.IO;
+using BackupSaves.Core.Models;
+using BackupSaves.Core.Services;
+using BackupSaves.Scheduler.Services;
+using WpfApp_BackupSaves.Dialogs;
+using WpfApp_BackupSaves.Services;
+using WpfApp_BackupSaves.ViewModels;
+using WinForms = System.Windows.Forms;
+
+namespace WpfApp_BackupSaves;
+
+public partial class MainWindow : Window
+{
+    private readonly MainViewModel _vm = new();
+    private readonly ISettingsStore _settings;
+    private readonly IHistoryStore _historyStore;
+    private readonly IBackupRunner _runner;
+    private readonly IRestoreService _restore = new RestoreService();
+    private readonly IWindowsTaskSchedulerService _scheduler = new WindowsTaskSchedulerService();
+    private readonly ArchiveFolderWatcher _watcher;
+    private WinForms.NotifyIcon? _tray;
+    private bool _reallyClose;
+    private bool _cleanedUp;
+    private bool _updateCheckStarted;
+    private AppSettings _app = new();
+    private bool _historyFullyLoaded;
+    private int _historyHiddenCount;
+    private int _archiveDetailLoadToken;
+    private bool _suppressHistorySelection;
+    private bool _editingArchiveDisplayName;
+    private readonly IUpdateChecker _updateChecker = new GitHubReleaseUpdateChecker();
+    private InAppBackupScheduler? _inAppScheduler;
+    private DispatcherTimer? _profilesLiveTimer;
+    private readonly Dictionary<Guid, DateTimeOffset?> _taskNextRunCache = new();
+    private DateTimeOffset _taskNextRunCacheAt = DateTimeOffset.MinValue;
+    private readonly Dictionary<Guid, bool> _watchRunningCache = new();
+    private int _profilesLiveGate;
+    private DispatcherTimer? _placementSaveTimer;
+    private bool _placementReady;
+    private ICollectionView? _archivesView;
+
+    public MainWindow()
+    {
+        _settings = new SettingsStore();
+        _historyStore = new HistoryStore(_settings);
+        _runner = new BackupRunner(_settings, _historyStore);
+
+        InitializeComponent();
+        CustomWindowChrome.Apply(this);
+        Title = $"BackupSaves {AppVersion.Current}";
+        DataContext = _vm;
+        _archivesView = CollectionViewSource.GetDefaultView(_vm.Archives);
+        _archivesView.Filter = ArchivesViewFilter;
+        _vm.ArchivesFilterChanged += (_, _) => RefreshArchivesView();
+        _watcher = new ArchiveFolderWatcher(() => Dispatcher.Invoke(RefreshArchives));
+        InitTray();
+        TryRestoreWindowPlacementEarly();
+        _vm.LanguageChanged += OnUiLanguageChanged;
+        LocalizationService.Instance.LanguageChanged += (_, _) =>
+        {
+            Dispatcher.Invoke(() =>
+            {
+                RebuildTrayMenu();
+                UpdateThemeToggleCaption();
+                RefreshProfilesLive();
+                RefreshHistoryLoadMoreCaption();
+                UpdateHistoryFilterDisplay();
+            });
+        };
+        LocationChanged += (_, _) => ScheduleSaveWindowPlacement();
+        SizeChanged += (_, _) => ScheduleSaveWindowPlacement();
+        Loaded += async (_, _) => await LoadAsync();
+    }
+
+    private bool ArchivesViewFilter(object obj) =>
+        obj is ArchiveListItem item && _vm.MatchesArchiveFilter(item);
+
+    private ArchiveListItem? FirstVisibleArchive() =>
+        _archivesView?.Cast<ArchiveListItem>().FirstOrDefault();
+
+    private void RefreshArchivesView()
+    {
+        _archivesView?.Refresh();
+        RenumberVisibleArchives();
+        SyncSelectedArchiveWithVisibleView();
+    }
+
+    /// <summary>
+    /// Detail panel must not show an archive that is hidden by filters.
+    /// </summary>
+    private void SyncSelectedArchiveWithVisibleView()
+    {
+        var selected = _vm.SelectedArchive;
+        if (selected is null)
+            return;
+
+        if (_vm.MatchesArchiveFilter(selected))
+            return;
+
+        _vm.SelectedArchive = null;
+    }
+
+    private void RenumberVisibleArchives()
+    {
+        if (_archivesView is null)
+            return;
+
+        var n = 1;
+        foreach (var item in _archivesView.Cast<ArchiveListItem>())
+            item.RowNumber = n++;
+    }
+
+    private void TryRestoreWindowPlacementEarly()
+    {
+        try
+        {
+            _app = _settings.Load();
+            if (!WindowPlacement.TryApply(this, _app.Ui))
+            {
+                // Invisible / missing monitor / no saved bounds → default centered layout.
+                WindowPlacement.ApplyDefault(this);
+                if (WindowPlacement.HasSavedPlacement(_app.Ui))
+                {
+                    AppLog.Default.Info("App", "Saved window placement is off-screen; using default");
+                    WindowPlacement.Clear(_app.Ui);
+                    _settings.Save(_app);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Warn("App", $"Window placement restore failed: {ex.Message}");
+            WindowPlacement.ApplyDefault(this);
+        }
+        finally
+        {
+            _placementReady = true;
+        }
+    }
+
+    private void ScheduleSaveWindowPlacement()
+    {
+        if (!_placementReady || _cleanedUp)
+            return;
+
+        _placementSaveTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _placementSaveTimer.Tick -= PlacementSaveTimer_Tick;
+        _placementSaveTimer.Tick += PlacementSaveTimer_Tick;
+        _placementSaveTimer.Stop();
+        _placementSaveTimer.Start();
+    }
+
+    private void PlacementSaveTimer_Tick(object? sender, EventArgs e)
+    {
+        _placementSaveTimer?.Stop();
+        SaveWindowPlacement();
+    }
+
+    private void SaveWindowPlacement(bool force = false)
+    {
+        if (!_placementReady)
+            return;
+        if (_cleanedUp && !force)
+            return;
+
+        try
+        {
+            // When minimized, keep last Normal/Maximized bounds already in _app.Ui.
+            if (WindowState != WindowState.Minimized)
+                WindowPlacement.Capture(this, _app.Ui);
+            _settings.Save(_app);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Warn("App", $"Window placement save failed: {ex.Message}");
+        }
+    }
+
+    private void ResetWindowPlacementFromTray()
+    {
+        WindowPlacement.Clear(_app.Ui);
+        WindowPlacement.ApplyDefault(this);
+        try
+        {
+            _settings.Save(_app);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Warn("App", $"Window placement reset save failed: {ex.Message}");
+        }
+
+        BringToForeground();
+        AppLog.Default.Info("App", "Window placement reset to default from tray");
+    }
+
+    private async void OnUiLanguageChanged(object? sender, string culture)
+    {
+        _app.Ui.Language = culture;
+        try
+        {
+            await _settings.SaveAsync(_app);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Settings", "Failed to save language", ex);
+        }
+    }
+
+    private void InitTray()
+    {
+        _tray = new WinForms.NotifyIcon
+        {
+            Visible = true,
+            Text = $"BackupSaves {AppVersion.Current}",
+            Icon = LoadAppIcon() ?? System.Drawing.SystemIcons.Application
+        };
+        _tray.DoubleClick += (_, _) => RestoreFromTray();
+        RebuildTrayMenu();
+    }
+
+    private void RebuildTrayMenu()
+    {
+        if (_tray is null) return;
+        var menu = new WinForms.ContextMenuStrip();
+        menu.Items.Add(LocalizationService.Text("tray.open"), null, (_, _) => RestoreFromTray());
+        menu.Items.Add(LocalizationService.Text("tray.resetPosition"), null, (_, _) =>
+            Dispatcher.Invoke(ResetWindowPlacementFromTray));
+        menu.Items.Add(new WinForms.ToolStripSeparator());
+        menu.Items.Add(LocalizationService.Text("tray.exit"), null, (_, _) =>
+        {
+            AppLog.Default.Info("App", "Exit from tray");
+            _reallyClose = true;
+            Close();
+        });
+        TrayMenuTheme.Apply(menu, ThemeManager.Current);
+        _tray.ContextMenuStrip = menu;
+    }
+
+    private static System.Drawing.Icon? LoadAppIcon()
+    {
+        try
+        {
+            var uri = new Uri("pack://application:,,,/Assets/app.ico");
+            var streamInfo = System.Windows.Application.GetResourceStream(uri);
+            if (streamInfo?.Stream is null)
+                return null;
+            return new System.Drawing.Icon(streamInfo.Stream);
+        }
+        catch
+        {
+            try
+            {
+                var exe = Environment.ProcessPath;
+                return exe is null ? null : System.Drawing.Icon.ExtractAssociatedIcon(exe);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _app = await _settings.LoadAsync();
+        ThemeManager.Apply(_app.Ui.Theme);
+        var lang = LocalizationService.Instance.ResolveInitialLanguage(_app.Ui.Language);
+        LocalizationService.Instance.SetLanguage(lang);
+        _vm.ReloadLanguages();
+        _vm.SelectLanguageSilent(LocalizationService.Instance.Language);
+        UpdateThemeToggleCaption();
+        RebuildTrayMenu();
+        ReloadProfilesUi();
+        await ReloadHistoryUiAsync();
+        _watcher.Watch(_app.Profiles);
+        _vm.Status = LocalizationService.Text("status.logs", AppLog.Default.LogDirectory);
+        AppLog.Default.Info("App",
+            $"MainWindow loaded; v={AppVersion.Current}; profiles={_app.Profiles.Count}; logDir={AppLog.Default.LogDirectory}; lang={LocalizationService.Instance.Language}");
+
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
+        StartProfilesLiveTimer();
+
+        if (!_updateCheckStarted)
+        {
+            _updateCheckStarted = true;
+#if DEBUG
+            if (TryOfferLocalArchiveUpdateAtStartup())
+                return;
+#endif
+            _ = CheckForUpdatesAsync();
+        }
+    }
+
+#if DEBUG
+    /// <summary>
+    /// Debug: if <c>{tfm}.7z/.zip</c> sits next to the exe, ask to apply it before GitHub check.
+    /// Returns true when the app is shutting down to apply the archive.
+    /// </summary>
+    private bool TryOfferLocalArchiveUpdateAtStartup()
+    {
+        var path = UpdateInstaller.FindLocalBuildFolderArchive();
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var key = UpdateInstaller.GetLocalArchiveKey(path);
+        if (!string.IsNullOrWhiteSpace(key)
+            && string.Equals(_app.Ui.LastAppliedLocalArchiveKey, key, StringComparison.Ordinal))
+        {
+            AppLog.Default.Info("Update",
+                $"Debug startup: local archive already applied ({key}), skip prompt");
+            return false;
+        }
+
+        var newer = UpdateInstaller.IsLocalArchiveLikelyNewer(path);
+        AppLog.Default.Info("Update",
+            $"Debug startup: local archive \"{path}\" likelyNewerThanExe={newer}");
+
+        var dlg = new LocalArchiveUpdateWindow(path, newer) { Owner = this };
+        dlg.ShowDialog();
+        if (!dlg.Accepted)
+        {
+            AppLog.Default.Info("Update", "Debug startup: user postponed local archive update");
+            return false;
+        }
+
+        ApplyLocalArchiveAndShutdown(path);
+        return true;
+    }
+#endif
+
+    private void ApplyLocalArchiveAndShutdown(string archivePath)
+    {
+        _vm.IsBusy = true;
+        _vm.Status = LocalizationService.Text("update.statusLocalApplying", Path.GetFileName(archivePath));
+        try
+        {
+            AppLog.Default.Info("App", $"Applying local update from \"{archivePath}\"");
+            _app.Ui.PendingUpdateZipPath = null;
+            _app.Ui.PendingUpdateVersion = null;
+            _app.Ui.LastAppliedLocalArchiveKey = UpdateInstaller.GetLocalArchiveKey(archivePath);
+            _settings.Save(_app);
+
+            _reallyClose = true;
+            CleanupOnExit();
+            UpdateInstaller.ApplyLocalArchiveAndExit(archivePath, restart: true);
+            System.Windows.Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Local archive update failed", ex);
+            _reallyClose = false;
+            _vm.IsBusy = false;
+            MessageBox.Show(this,
+                LocalizationService.Text("update.failed", ex.Message),
+                LocalizationService.Text("update.title"),
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        try
+        {
+            var release = await _updateChecker.GetNewerReleaseAsync();
+            if (release is null)
+                return;
+
+            if (string.Equals(_app.Ui.SkippedUpdateVersion, release.Version, StringComparison.OrdinalIgnoreCase))
+            {
+                AppLog.Default.Info("Update", $"Skipped version {release.Version} (user choice)");
+                return;
+            }
+
+            // Already scheduled for exit
+            if (string.Equals(_app.Ui.PendingUpdateVersion, release.Version, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(_app.Ui.PendingUpdateZipPath)
+                && File.Exists(_app.Ui.PendingUpdateZipPath))
+            {
+                _vm.Status = LocalizationService.Text("update.statusWillInstall", release.Version);
+                return;
+            }
+
+            var choice = UpdateChoice.LaterAskAgain;
+            await Dispatcher.InvokeAsync(() =>
+            {
+                var dlg = new UpdateAvailableWindow(AppVersion.Current, release.Version, release.ReleaseNotes)
+                {
+                    Owner = this
+                };
+                dlg.ShowDialog();
+                choice = dlg.Choice;
+            });
+
+            switch (choice)
+            {
+                case UpdateChoice.UpdateNow:
+                    await DownloadAndApplyNowAsync(release);
+                    break;
+                case UpdateChoice.UpdateOnClose:
+                    await DownloadForDeferredUpdateAsync(release);
+                    break;
+                case UpdateChoice.SkipThisVersion:
+                    _app.Ui.SkippedUpdateVersion = release.Version;
+                    _app.Ui.PendingUpdateVersion = null;
+                    _app.Ui.PendingUpdateZipPath = null;
+                    await _settings.SaveAsync(_app);
+                    AppLog.Default.Info("Update", $"User skipped version {release.Version}");
+                    _vm.Status = LocalizationService.Text("update.statusSkipped", release.Version);
+                    break;
+                default:
+                    AppLog.Default.Info("Update", "User postponed update prompt");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Update check failed", ex);
+            _vm.Status = LocalizationService.Text("update.statusCheckFailed");
+        }
+    }
+
+    private async Task DownloadAndApplyNowAsync(ReleaseInfo release)
+    {
+        _vm.IsBusy = true;
+        _vm.Status = LocalizationService.Text("update.statusDownloading", release.Version);
+        try
+        {
+            var progress = new Progress<double>(p =>
+                _vm.Status = LocalizationService.Text("update.statusDownloadingPct", release.Version, (int)(p * 100)));
+            var zip = await UpdateInstaller.DownloadAsync(release, progress);
+            _app.Ui.PendingUpdateVersion = null;
+            _app.Ui.PendingUpdateZipPath = null;
+            await _settings.SaveAsync(_app);
+
+            AppLog.Default.Info("Update", $"Applying now → {release.Version}");
+            _reallyClose = true;
+            CleanupOnExit();
+            UpdateInstaller.ApplyAndExit(zip, restart: true);
+            System.Windows.Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Update now failed", ex);
+            MessageBox.Show(this, LocalizationService.Text("update.failed", ex.Message),
+                LocalizationService.Text("update.title"),
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            _vm.IsBusy = false;
+        }
+    }
+
+    private async Task DownloadForDeferredUpdateAsync(ReleaseInfo release)
+    {
+        _vm.IsBusy = true;
+        _vm.Status = LocalizationService.Text("update.statusDownloadingDeferred", release.Version);
+        try
+        {
+            var progress = new Progress<double>(p =>
+                _vm.Status = LocalizationService.Text("update.statusDownloadingPct", release.Version, (int)(p * 100)));
+            var zip = await UpdateInstaller.DownloadAsync(release, progress);
+            _app.Ui.PendingUpdateVersion = release.Version;
+            _app.Ui.PendingUpdateZipPath = zip;
+            await _settings.SaveAsync(_app);
+            AppLog.Default.Info("Update", $"Deferred update ready: {release.Version} @ {zip}");
+            _vm.Status = LocalizationService.Text("update.statusDeferredReady", release.Version);
+            MessageBox.Show(this,
+                LocalizationService.Text("update.deferredReady", release.Version),
+                LocalizationService.Text("update.title"), MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Deferred download failed", ex);
+            MessageBox.Show(this, LocalizationService.Text("update.downloadFailed", ex.Message),
+                LocalizationService.Text("update.title"),
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _vm.IsBusy = false;
+        }
+    }
+
+    private async void ThemeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        var next = ThemeManager.Toggle();
+        _app.Ui.Theme = next;
+        UpdateThemeToggleCaption();
+        RebuildTrayMenu();
+        RefreshArchiveAgeDots();
+        AppLog.Default.Info("Settings", $"Theme → {next}");
+        await _settings.SaveAsync(_app);
+        _vm.Status = next == AppTheme.Dark
+            ? LocalizationService.Text("status.themeDark")
+            : LocalizationService.Text("status.themeLight");
+    }
+
+    private void OpenLogs_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dir = AppLog.Default.LogDirectory;
+            Directory.CreateDirectory(dir);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{dir}\"",
+                UseShellExecute = true
+            });
+            _vm.Status = LocalizationService.Text("status.logs", dir);
+            AppLog.Default.Info("App", $"Opened log folder: {dir}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Open logs folder failed", ex);
+            MessageBox.Show(this, LocalizationService.Text("msg.logsOpenFailed", ex.Message),
+                LocalizationService.Text("msg.logsTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void UpdateThemeToggleCaption()
+    {
+        // Button offers the *other* theme
+        ThemeToggleButton.Content = ThemeManager.Current == AppTheme.Dark
+            ? LocalizationService.Text("main.themeLight")
+            : LocalizationService.Text("main.themeDark");
+    }
+
+    private void ReloadProfilesUi()
+    {
+        var selectedId = _vm.SelectedProfile?.Id;
+        _vm.Profiles.Clear();
+        foreach (var p in _app.Profiles.OrderBy(p => p.Name))
+            _vm.Profiles.Add(new ProfileListItem(p));
+        _vm.SelectedProfile = selectedId is Guid id
+            ? _vm.Profiles.FirstOrDefault(p => p.Id == id)
+            : _vm.Profiles.FirstOrDefault();
+        InvalidateTaskNextRunCache();
+        RefreshProfilesLive();
+    }
+
+    private void StartProfilesLiveTimer()
+    {
+        if (_profilesLiveTimer is not null)
+            return;
+
+        _profilesLiveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _profilesLiveTimer.Tick += (_, _) => RefreshProfilesLive();
+        _profilesLiveTimer.Start();
+        RefreshProfilesLive();
+    }
+
+    private void InvalidateTaskNextRunCache()
+    {
+        _taskNextRunCache.Clear();
+        _taskNextRunCacheAt = DateTimeOffset.MinValue;
+        _watchRunningCache.Clear();
+    }
+
+    private void RefreshProfilesLive()
+    {
+        RefreshArchiveAgeDots();
+
+        if (_vm.Profiles.Count == 0)
+            return;
+
+        _ = RefreshProfilesLiveAsync();
+    }
+
+    private void RefreshArchiveAgeDots()
+    {
+        if (_vm.Archives.Count == 0)
+            return;
+
+        var now = DateTime.Now;
+        foreach (var archive in _vm.Archives)
+            archive.RefreshAgeDot(now);
+    }
+
+    private async Task RefreshProfilesLiveAsync()
+    {
+        if (_vm.Profiles.Count == 0)
+            return;
+
+        if (Interlocked.CompareExchange(ref _profilesLiveGate, 1, 0) != 0)
+            return;
+
+        try
+        {
+            var now = DateTimeOffset.Now;
+            EnsureTaskNextRunCache(now);
+            await EnsureWatchRunningCacheAsync();
+
+            var launchInputs = _app.Profiles
+                .Select(p => (p.Id, Cmd: GameLaunchService.Command(p)))
+                .ToList();
+            var launchBlocked = await Task.Run(() =>
+            {
+                var map = new Dictionary<Guid, bool>(launchInputs.Count);
+                foreach (var (id, cmd) in launchInputs)
+                    map[id] = cmd is not null && GameLaunchService.IsRunning(cmd);
+                return map;
+            }).ConfigureAwait(true);
+
+            foreach (var item in _vm.Profiles)
+            {
+                var profile = _app.Profiles.FirstOrDefault(p => p.Id == item.Id) ?? item.Profile;
+                _taskNextRunCache.TryGetValue(profile.Id, out var next);
+                _watchRunningCache.TryGetValue(profile.Id, out var running);
+                launchBlocked.TryGetValue(profile.Id, out var blocked);
+                item.Refresh(profile, now, next, running, blocked);
+            }
+
+            // Countdown hits "due now" on this 1s UI timer; don't wait for the scheduler's own tick.
+            MaybeKickInAppBackup(now);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _profilesLiveGate, 0);
+        }
+    }
+
+    private void MaybeKickInAppBackup(DateTimeOffset now)
+    {
+        if (_inAppScheduler is null || _vm.IsBusy)
+            return;
+
+        var utc = now.ToUniversalTime();
+        if (!_app.Profiles.Any(p => InAppBackupScheduler.IsInAppIntervalElapsed(p, utc)))
+            return;
+
+        _inAppScheduler.RequestTick();
+    }
+
+    private Task EnsureWatchRunningCacheAsync()
+    {
+        var shortest = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
+        var profilePatterns = new List<(Guid Id, string? Pattern, bool WatchOn)>();
+
+        foreach (var profile in _app.Profiles)
+        {
+            var watchOn = profile.WatchProcessEnabled
+                          && ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern);
+            profilePatterns.Add((profile.Id, profile.WatchProcessPattern, watchOn));
+            if (!watchOn)
+                continue;
+
+            var key = profile.WatchProcessPattern!.Trim();
+            var interval = TimeSpan.FromSeconds(
+                Math.Max(1, profile.WatchProcessScanSeconds <= 0 ? 10 : profile.WatchProcessScanSeconds));
+            if (!shortest.TryGetValue(key, out var existing) || interval < existing)
+                shortest[key] = interval;
+        }
+
+        return ApplyWatchRunningCacheAsync(shortest, profilePatterns);
+    }
+
+    private async Task ApplyWatchRunningCacheAsync(
+        Dictionary<string, TimeSpan> shortest,
+        List<(Guid Id, string? Pattern, bool WatchOn)> profilePatterns)
+    {
+        var runningMap = shortest.Count == 0
+            ? (IReadOnlyDictionary<string, bool>)new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+            : await Task.Run(() => ProcessWatchService.EvaluatePatterns(
+                shortest.Select(kv => (kv.Key, (TimeSpan?)kv.Value)))).ConfigureAwait(true);
+
+        var liveIds = new HashSet<Guid>();
+        foreach (var (id, pattern, watchOn) in profilePatterns)
+        {
+            liveIds.Add(id);
+            if (!watchOn)
+            {
+                _watchRunningCache[id] = false;
+                continue;
+            }
+
+            _watchRunningCache[id] = pattern is not null
+                && runningMap.TryGetValue(pattern.Trim(), out var running)
+                && running;
+        }
+
+        foreach (var stale in _watchRunningCache.Keys.Where(id => !liveIds.Contains(id)).ToList())
+            _watchRunningCache.Remove(stale);
+    }
+
+    private void EnsureTaskNextRunCache(DateTimeOffset now)
+    {
+        if (now - _taskNextRunCacheAt < TimeSpan.FromSeconds(30) && _taskNextRunCache.Count > 0)
+            return;
+
+        _taskNextRunCache.Clear();
+        foreach (var profile in _app.Profiles)
+        {
+            DateTimeOffset? next = null;
+            if (profile.Schedule.Enabled)
+            {
+                try { next = _scheduler.GetNextRunTime(profile); }
+                catch { /* ignore */ }
+            }
+
+            _taskNextRunCache[profile.Id] = next;
+        }
+
+        _taskNextRunCacheAt = now;
+    }
+
+    private async Task ReloadHistoryUiAsync(bool loadAll = false)
+    {
+        var all = await _historyStore.LoadAsync();
+        if (loadAll)
+            _historyFullyLoaded = true;
+
+        var filterId = _vm.HistoryFilterProfileId;
+        IReadOnlyList<RunHistoryEntry> filtered = filterId is Guid fid
+            ? all.Where(h => h.ProfileId == fid).ToList()
+            : all;
+
+        var take = _historyFullyLoaded
+            ? filtered.Count
+            : Math.Min(HistoryStore.UiInitialCount, filtered.Count);
+
+        _suppressHistorySelection = true;
+        try
+        {
+            _vm.History.Clear();
+            for (var i = 0; i < take; i++)
+            {
+                var h = filtered[i];
+                if (string.IsNullOrWhiteSpace(h.ProfileName))
+                {
+                    h.ProfileName = _app.Profiles.FirstOrDefault(p => p.Id == h.ProfileId)?.Name
+                                   ?? LocalizationService.Text("history.profileDeleted");
+                }
+
+                _vm.History.Add(h);
+            }
+
+            if (!_historyFullyLoaded && filtered.Count > take)
+            {
+                _historyHiddenCount = filtered.Count - take;
+                _vm.History.Add(new HistoryLoadMoreItem
+                {
+                    Caption = LocalizationService.Text("history.loadAll", _historyHiddenCount)
+                });
+            }
+            else
+            {
+                _historyHiddenCount = 0;
+            }
+        }
+        finally
+        {
+            _suppressHistorySelection = false;
+        }
+
+        UpdateHistoryFilterDisplay();
+    }
+
+    private void UpdateHistoryFilterDisplay()
+    {
+        if (_vm.HistoryFilterProfileId is not Guid id)
+        {
+            _vm.HistoryFilterDisplay = "";
+            return;
+        }
+
+        var name = _app.Profiles.FirstOrDefault(p => p.Id == id)?.Name
+                   ?? LocalizationService.Text("history.profileDeleted");
+        _vm.HistoryFilterDisplay = LocalizationService.Text("main.historyFilterActive", name);
+    }
+
+    private void RefreshHistoryLoadMoreCaption()
+    {
+        if (_historyHiddenCount <= 0) return;
+        for (var i = 0; i < _vm.History.Count; i++)
+        {
+            if (_vm.History[i] is not HistoryLoadMoreItem) continue;
+            _vm.History[i] = new HistoryLoadMoreItem
+            {
+                Caption = LocalizationService.Text("history.loadAll", _historyHiddenCount)
+            };
+            return;
+        }
+    }
+
+    private async void LoadAllHistory_Click(object sender, RoutedEventArgs e)
+    {
+        await ReloadHistoryUiAsync(loadAll: true);
+    }
+
+    private void Profiles_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        RefreshArchives();
+    }
+
+    private void LaunchProfile_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not System.Windows.Controls.Button btn || btn.DataContext is not ProfileListItem item)
+            return;
+
+        var command = GameLaunchService.Command(item.Profile);
+        if (command is null || !item.CanLaunch)
+            return;
+
+        StartLaunch(item, command);
+    }
+
+    private void StartLaunch(ProfileListItem item, string command)
+    {
+        if (!GameLaunchService.TryStart(command, out var error))
+        {
+            AppLog.Default.Error("Launch", error ?? command);
+            MessageBox.Show(this, error ?? LocalizationService.Text("profile.launchFailed", command),
+                LocalizationService.Text("common.appName"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        AppLog.Default.Info("Launch",
+            $"Started «{GameLaunchService.DisplayName(command)}» for profile «{item.Name}»");
+        item.SetLaunchBlocked(true);
+        _vm.Status = LocalizationService.Text("profile.launchButtonTip", GameLaunchService.DisplayName(command));
+    }
+
+    private void RefreshArchives()
+    {
+        // Don't rebuild the list while the user is typing an archive title —
+        // clearing SelectedArchive would reset the TextBox mid-edit.
+        if (_editingArchiveDisplayName)
+            return;
+
+        var profile = _vm.SelectedProfile?.Profile;
+        var previousSelected = _vm.SelectedArchive;
+        var selectedPath = previousSelected?.Path;
+
+        if (profile is null || string.IsNullOrWhiteSpace(profile.BackupRoot))
+        {
+            if (_vm.Archives.Count > 0)
+                _vm.Archives.Clear();
+            _vm.SelectedArchive = null;
+            _vm.RebuildArchiveSizeFilterOptions();
+            RefreshArchivesView();
+            return;
+        }
+
+        var dir = PathHelper.GetProfileArchiveDirectory(profile);
+        if (!Directory.Exists(dir))
+        {
+            if (_vm.Archives.Count > 0)
+                _vm.Archives.Clear();
+            _vm.SelectedArchive = null;
+            _vm.RebuildArchiveSizeFilterOptions();
+            RefreshArchivesView();
+            return;
+        }
+
+        var disk = Directory.EnumerateFiles(dir)
+            .Where(f =>
+            {
+                var n = f.ToLowerInvariant();
+                return (n.EndsWith(".7z") || n.EndsWith(".zip")) && !n.EndsWith(".tmp");
+            })
+            .Select(f => new FileInfo(f))
+            .OrderByDescending(f => f.LastWriteTimeUtc)
+            .ToList();
+
+            // Fast path: same files in same order — keep instances (no Clear → no layout flicker).
+            // Do not Refresh() the view: a Reset drops the virtualized top row until selection changes.
+        if (disk.Count == _vm.Archives.Count
+            && disk.Select(f => f.FullName)
+                .SequenceEqual(_vm.Archives.Select(a => a.Path), StringComparer.OrdinalIgnoreCase))
+        {
+            _vm.RebuildArchiveSizeFilterOptions();
+
+            // Restore only the previously selected path if it is still visible.
+            // Do not fall back to Archives[0] — that resurrects a hidden item when filters empty the list.
+            if (_vm.SelectedArchive is null && selectedPath is not null)
+            {
+                var pick = _vm.Archives.FirstOrDefault(a =>
+                    string.Equals(a.Path, selectedPath, StringComparison.OrdinalIgnoreCase)
+                    && _vm.MatchesArchiveFilter(a));
+                if (pick is not null)
+                    _vm.SelectedArchive = pick;
+            }
+
+            return;
+        }
+
+        var existing = _vm.Archives.ToDictionary(a => a.Path, StringComparer.OrdinalIgnoreCase);
+        var next = new List<ArchiveListItem>(disk.Count);
+        foreach (var f in disk)
+        {
+            if (existing.TryGetValue(f.FullName, out var item))
+            {
+                next.Add(item);
+                continue;
+            }
+
+            var meta = ArchiveMetaStore.Load(f.FullName);
+            var created = new ArchiveListItem
+            {
+                Path = f.FullName,
+                Name = f.Name,
+                LastWriteTime = f.LastWriteTime,
+                SizeBytes = f.Length,
+                FormatDisplay = f.Extension.TrimStart('.').ToUpperInvariant()
+            };
+            created.DisplayName = meta.DisplayName?.Trim() ?? "";
+            created.ExcludeFromRetention = meta.ExcludeFromRetention;
+            next.Add(created);
+        }
+
+        ApplyArchiveList(next);
+
+        if (previousSelected is not null
+            && next.Any(a => ReferenceEquals(a, previousSelected))
+            && _vm.MatchesArchiveFilter(previousSelected))
+        {
+            if (!ReferenceEquals(_vm.SelectedArchive, previousSelected))
+                _vm.SelectedArchive = previousSelected;
+            return;
+        }
+
+        ArchiveListItem? toSelect = null;
+        if (selectedPath is not null)
+        {
+            toSelect = next.FirstOrDefault(a =>
+                string.Equals(a.Path, selectedPath, StringComparison.OrdinalIgnoreCase)
+                && _vm.MatchesArchiveFilter(a));
+        }
+
+        // New disk set / first load: pick first visible only when we had no prior selection path.
+        if (toSelect is null && selectedPath is null)
+            toSelect = FirstVisibleArchive();
+
+        if (!ReferenceEquals(_vm.SelectedArchive, toSelect))
+        {
+            _vm.SelectedArchive = toSelect;
+            if (toSelect is not null)
+                _ = LoadSelectedArchiveDetailsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Sync Archives to <paramref name="next"/> with Move/Insert/Remove only.
+    /// Avoids Clear(), which briefly nulls selection and collapses the detail panel (layout flicker).
+    /// </summary>
+    private void ApplyArchiveList(List<ArchiveListItem> next)
+    {
+        ArchiveListItem? prepended = null;
+
+        for (var i = _vm.Archives.Count - 1; i >= 0; i--)
+        {
+            var path = _vm.Archives[i].Path;
+            if (!next.Any(n => string.Equals(n.Path, path, StringComparison.OrdinalIgnoreCase)))
+                _vm.Archives.RemoveAt(i);
+        }
+
+        for (var i = 0; i < next.Count; i++)
+        {
+            var want = next[i];
+            if (i < _vm.Archives.Count
+                && string.Equals(_vm.Archives[i].Path, want.Path, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var found = -1;
+            for (var j = i; j < _vm.Archives.Count; j++)
+            {
+                if (!string.Equals(_vm.Archives[j].Path, want.Path, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                found = j;
+                break;
+            }
+
+            if (found >= 0)
+                _vm.Archives.Move(found, i);
+            else
+            {
+                _vm.Archives.Insert(i, want);
+                // Newest archive is prepended. Item-scroll virtualization often
+                // never generates that container until something selects it.
+                if (i == 0)
+                    prepended = want;
+            }
+        }
+
+        while (_vm.Archives.Count > next.Count)
+            _vm.Archives.RemoveAt(_vm.Archives.Count - 1);
+
+        for (var i = 0; i < _vm.Archives.Count; i++)
+            _vm.Archives[i].RowNumber = i + 1;
+
+        _vm.RebuildArchiveSizeFilterOptions();
+        // Collection Add already updates the filtered view. Refresh() sends Reset,
+        // which leaves the new top row unrealized until a later selection change.
+        RenumberVisibleArchives();
+        SyncSelectedArchiveWithVisibleView();
+        RefreshArchiveAgeDots();
+        if (prepended is not null)
+            ScheduleRevealArchive(prepended);
+    }
+
+    /// <summary>
+    /// The archives list can omit a row inserted at index 0 while the scroll offset
+    /// stays 0. History selection shows it because that realizes the container.
+    /// </summary>
+    private void ScheduleRevealArchive(ArchiveListItem item)
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RevealArchiveRow(item));
+    }
+
+    private void RevealArchiveRow(ArchiveListItem item)
+    {
+        if (!_vm.Archives.Contains(item) || !_vm.MatchesArchiveFilter(item))
+            return;
+
+        if (_archivesView is not null && !ViewContainsArchive(item))
+        {
+            _archivesView.Refresh();
+            RenumberVisibleArchives();
+        }
+
+        var scroll = FindScrollViewer(ArchivesList);
+        if (scroll is not null && scroll.VerticalOffset > 1)
+            return;
+
+        if (ArchivesList.ItemContainerGenerator.ContainerFromItem(item) is not null)
+            return;
+
+        ArchivesList.ScrollIntoView(item);
+        ArchivesList.UpdateLayout();
+        if (ArchivesList.ItemContainerGenerator.ContainerFromItem(item) is not null)
+            return;
+
+        scroll = FindScrollViewer(ArchivesList);
+        if (scroll is null || scroll.ScrollableHeight <= 0)
+            return;
+
+        scroll.ScrollToVerticalOffset(Math.Min(scroll.ScrollableHeight, scroll.VerticalOffset + 32));
+        ArchivesList.UpdateLayout();
+        scroll.ScrollToVerticalOffset(0);
+        ArchivesList.UpdateLayout();
+        ArchivesList.ScrollIntoView(item);
+    }
+
+    private bool ViewContainsArchive(ArchiveListItem item)
+    {
+        if (_archivesView is null)
+            return false;
+
+        foreach (var row in _archivesView)
+        {
+            if (ReferenceEquals(row, item))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static System.Windows.Controls.ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        var count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is System.Windows.Controls.ScrollViewer viewer)
+                return viewer;
+
+            var nested = FindScrollViewer(child);
+            if (nested is not null)
+                return nested;
+        }
+
+        return null;
+    }
+
+    private async Task PersistAndSyncSchedulerAsync(BackupProfile? changed = null)
+    {
+        await _settings.SaveAsync(_app);
+        var exe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
+        if (string.IsNullOrEmpty(exe))
+            return;
+
+        var targets = changed is null ? _app.Profiles : [_app.Profiles.First(p => p.Id == changed.Id)];
+        foreach (var p in targets)
+        {
+            try
+            {
+                _scheduler.Upsert(p, exe);
+                AppLog.Default.Info("Scheduler",
+                    $"Upsert task for «{p.Name}» enabled={p.Schedule.Enabled} kind={p.Schedule.Kind}");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Default.Error("Scheduler", $"Upsert failed for «{p.Name}»", ex);
+                _vm.Status = $"Scheduler: {ex.Message}";
+            }
+        }
+
+        _watcher.Watch(_app.Profiles);
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
+        InvalidateTaskNextRunCache();
+        RefreshProfilesLive();
+    }
+
+    private void EnsureInAppScheduler()
+    {
+        if (_inAppScheduler is not null)
+            return;
+
+        _inAppScheduler = new InAppBackupScheduler(
+            getApp: () => _app,
+            runBackup: RunInAppBackupAsync,
+            saveApp: () => _settings.SaveAsync(_app),
+            setStatus: s => _vm.Status = s,
+            onBackupStarting: async () =>
+            {
+                if (_vm.IsBusy)
+                    return;
+                await ShowBackupProgressAsync();
+            },
+            onBackupNotDue: () =>
+            {
+                if (!_vm.IsBusy)
+                    _vm.EndBackupProgress();
+            });
+    }
+
+    private async Task RunInAppBackupAsync(Guid profileId)
+    {
+        if (_vm.IsBusy)
+        {
+            AppLog.Default.Info("InAppSchedule", $"Skip {profileId:N}: UI busy");
+            return;
+        }
+
+        _vm.IsBusy = true;
+        if (!_vm.IsBackupProgressVisible)
+            await ShowBackupProgressAsync();
+        var progress = CreateBackupProgress();
+        try
+        {
+            var result = await _runner.RunProfileAsync(profileId, RunTrigger.InApp, progress: progress);
+            _app = await _settings.LoadAsync();
+
+            var profile = _app.Profiles.FirstOrDefault(p => p.Id == profileId);
+            if (profile is not null)
+            {
+                profile.Schedule.LastInAppBackupUtc = DateTimeOffset.UtcNow;
+                await _settings.SaveAsync(_app);
+            }
+
+            await ReloadHistoryUiAsync();
+            RefreshArchives();
+            RefreshProfilesLive();
+            _vm.Status = result.Skipped
+                ? (result.StatusMessage ?? LocalizationService.Text("status.skipDefault"))
+                : result.Success
+                    ? LocalizationService.Text("status.autoBackupOk", result.ArchivePath)
+                    : LocalizationService.Text("status.autoBackupError", result.ErrorMessage);
+        }
+        finally
+        {
+            _vm.EndBackupProgress();
+            _vm.IsBusy = false;
+        }
+    }
+
+    private async void AddProfile_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new ProfileEditWindow { Owner = this };
+        if (dlg.ShowDialog() != true)
+            return;
+
+        _app.Profiles.Add(dlg.Profile);
+        AppLog.Default.Info("Settings",
+            $"Profile created: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} root=\"{dlg.Profile.BackupRoot}\"");
+        await PersistAndSyncSchedulerAsync(dlg.Profile);
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
+        ReloadProfilesUi();
+        _vm.SelectedProfile = _vm.Profiles.FirstOrDefault(p => p.Id == dlg.Profile.Id);
+        _vm.Status = LocalizationService.Text("status.profileCreated", dlg.Profile.Name);
+    }
+
+    private async void EditProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedProfile is null) return;
+        var dlg = new ProfileEditWindow(_vm.SelectedProfile.Profile) { Owner = this };
+        if (dlg.ShowDialog() != true)
+            return;
+
+        var idx = _app.Profiles.FindIndex(p => p.Id == dlg.Profile.Id);
+        if (idx < 0) return;
+        _app.Profiles[idx] = dlg.Profile;
+        AppLog.Default.Info("Settings",
+            $"Profile updated: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} schedule={dlg.Profile.Schedule.Enabled}/{dlg.Profile.Schedule.Kind} inApp={dlg.Profile.Schedule.InAppEnabled}");
+        await PersistAndSyncSchedulerAsync(dlg.Profile);
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
+        ReloadProfilesUi();
+        _vm.SelectedProfile = _vm.Profiles.FirstOrDefault(p => p.Id == dlg.Profile.Id);
+        _vm.Status = LocalizationService.Text("status.profileSaved", dlg.Profile.Name);
+    }
+
+    private async void DeleteProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedProfile is null) return;
+        var p = _vm.SelectedProfile.Profile;
+        if (MessageBox.Show(this, LocalizationService.Text("msg.deleteProfile", p.Name),
+                LocalizationService.Text("common.appName"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        try { _scheduler.Delete(p); } catch { /* ignore */ }
+        AppLog.Default.Info("Settings", $"Profile deleted: «{p.Name}» id={p.Id:N}");
+        _app.Profiles.RemoveAll(x => x.Id == p.Id);
+        await _settings.SaveAsync(_app);
+        ReloadProfilesUi();
+        _watcher.Watch(_app.Profiles);
+        RefreshArchives();
+        _vm.Status = LocalizationService.Text("status.profileDeleted");
+    }
+
+    private async void BackupNow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedProfile is null || _vm.IsBusy) return;
+        _vm.IsBusy = true;
+        _vm.Status = LocalizationService.Text("status.backup");
+        await ShowBackupProgressAsync();
+        var progress = CreateBackupProgress();
+        try
+        {
+            var result = await _runner.RunProfileAsync(_vm.SelectedProfile.Id, RunTrigger.Manual, progress: progress);
+            _app = await _settings.LoadAsync();
+            await ReloadHistoryUiAsync();
+            RefreshArchives();
+            RefreshProfilesLive();
+            _vm.Status = result.Skipped
+                ? (result.StatusMessage ?? LocalizationService.Text("status.skipDefault"))
+                : result.Success
+                    ? LocalizationService.Text("status.backupOk", result.ArchivePath)
+                    : LocalizationService.Text("status.backupError", result.ErrorMessage);
+            if (!result.Success)
+                MessageBox.Show(this, result.ErrorMessage, LocalizationService.Text("msg.backupTitle"),
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _vm.EndBackupProgress();
+            _vm.IsBusy = false;
+        }
+    }
+
+    private Progress<BackupProgress> CreateBackupProgress() =>
+        new(p => _vm.ReportBackupProgress(p));
+
+    /// <summary>Show the archives progress bar and let WPF paint it before backup work blocks the UI.</summary>
+    private async Task ShowBackupProgressAsync()
+    {
+        _vm.BeginBackupProgress();
+        // PropertyChanged alone is not enough: sync prep in BackupService can run on this
+        // dispatcher before the next render pass, so the bar would stay invisible until later.
+        await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Render);
+    }
+
+    private async void Restore_Click(object sender, RoutedEventArgs e)
+    {
+        await RestoreSelectedArchiveAsync();
+    }
+
+    private async Task RestoreSelectedArchiveAsync()
+    {
+        if (_vm.SelectedArchive is null || _vm.IsBusy) return;
+
+        var confirm = MessageBox.Show(this,
+            LocalizationService.Text("msg.restoreConfirm", _vm.SelectedArchive.Name),
+            LocalizationService.Text("msg.restoreTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            AppLog.Default.Info("Restore", "User cancelled confirm");
+            return;
+        }
+
+        AppLog.Default.Info("Restore", $"UI restore: \"{_vm.SelectedArchive.Path}\"");
+        _vm.IsBusy = true;
+        _vm.Status = LocalizationService.Text("status.restoring");
+        try
+        {
+            var result = await _restore.RestoreAsync(_vm.SelectedArchive.Path, overwrite: true);
+            if (result.Success)
+            {
+                _vm.Status = LocalizationService.Text("status.restored", result.RestoredCount);
+                MessageBox.Show(this, LocalizationService.Text("msg.restoreOk", result.RestoredCount),
+                    LocalizationService.Text("msg.restoreTitle"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                var details = result.ErrorMessage ?? "";
+                if (result.Errors.Count > 0)
+                    details += "\n\n" + string.Join("\n", result.Errors.Take(15).Select(x => $"{x.SourcePath}: {x.Message}"));
+                _vm.Status = details.Split('\n')[0];
+                MessageBox.Show(this, details, LocalizationService.Text("msg.restoreErrors"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        finally
+        {
+            _vm.IsBusy = false;
+        }
+    }
+
+    private void ArchivesList_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var dep = e.OriginalSource as DependencyObject;
+        while (dep is not null && dep is not System.Windows.Controls.ListBoxItem)
+            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+
+        if (dep is System.Windows.Controls.ListBoxItem item)
+            item.IsSelected = true;
+    }
+
+    private void ProfilesList_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var dep = e.OriginalSource as DependencyObject;
+        while (dep is not null && dep is not System.Windows.Controls.ListBoxItem)
+            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+
+        if (dep is System.Windows.Controls.ListBoxItem item)
+            item.IsSelected = true;
+    }
+
+    private void ArchivesList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        _ = LoadSelectedArchiveDetailsAsync();
+    }
+
+    private async Task LoadSelectedArchiveDetailsAsync()
+    {
+        var archive = _vm.SelectedArchive;
+        if (archive is null)
+            return;
+
+        var token = ++_archiveDetailLoadToken;
+        var path = archive.Path;
+
+        try
+        {
+            var manifest = await _restore.ReadManifestAsync(path);
+            if (token != _archiveDetailLoadToken || !ReferenceEquals(_vm.SelectedArchive, archive))
+                return;
+
+            if (manifest is null)
+            {
+                archive.ManifestProfileName = "";
+                archive.CreatedDisplay = "";
+                if (string.IsNullOrWhiteSpace(archive.FormatDisplay))
+                    archive.FormatDisplay = System.IO.Path.GetExtension(path).TrimStart('.').ToUpperInvariant();
+                return;
+            }
+
+            archive.ManifestProfileName = manifest.ProfileName ?? "";
+            archive.CreatedDisplay = manifest.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+            archive.FormatDisplay = manifest.Format.ToString().ToUpperInvariant();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", $"Failed to read archive details: \"{path}\"", ex);
+            if (token == _archiveDetailLoadToken && ReferenceEquals(_vm.SelectedArchive, archive))
+            {
+                archive.ManifestProfileName = "";
+                archive.CreatedDisplay = "";
+            }
+        }
+    }
+
+    private void ArchivesFiltersToggle_Click(object sender, RoutedEventArgs e) =>
+        _vm.ArchivesFiltersVisible = !_vm.ArchivesFiltersVisible;
+
+    private void ArchiveDisplayName_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _editingArchiveDisplayName = true;
+    }
+
+    private void ArchiveDisplayName_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter)
+            return;
+
+        e.Handled = true;
+        // Move focus away → LostFocus commits the name.
+        if (sender is System.Windows.Controls.TextBox tb)
+            tb.MoveFocus(new System.Windows.Input.TraversalRequest(
+                System.Windows.Input.FocusNavigationDirection.Next));
+    }
+
+    private void ArchiveDisplayName_LostFocus(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_vm.SelectedArchive is null)
+                return;
+
+            var archive = _vm.SelectedArchive;
+            // LostFocus often runs before binding source update — take text from the box.
+            if (sender is System.Windows.Controls.TextBox tb)
+            {
+                tb.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+                archive.DisplayName = tb.Text ?? "";
+            }
+
+            ArchiveMetaStore.SaveDisplayName(archive.Path, archive.DisplayName);
+            RefreshArchivesView();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Failed to save archive display name", ex);
+            MessageBox.Show(this, LocalizationService.Text("msg.saveArchiveNameFailed", ex.Message),
+                LocalizationService.Text("msg.archivesTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _editingArchiveDisplayName = false;
+        }
+    }
+
+    private void ArchiveKeepForever_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedArchive is null)
+            return;
+
+        var archive = _vm.SelectedArchive;
+        // Click runs after toggle; sync from control in case binding lagged.
+        if (sender is System.Windows.Controls.Primitives.ToggleButton tb)
+            archive.ExcludeFromRetention = tb.IsChecked == true;
+
+        try
+        {
+            ArchiveMetaStore.SaveExcludeFromRetention(archive.Path, archive.ExcludeFromRetention);
+            RefreshArchivesView();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Failed to save archive keep-forever flag", ex);
+            MessageBox.Show(this, LocalizationService.Text("msg.saveArchiveKeepFailed", ex.Message),
+                LocalizationService.Text("msg.archivesTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void FilterHistoryByProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedProfile is null) return;
+        _vm.HistoryFilterProfileId = _vm.SelectedProfile.Id;
+        _historyFullyLoaded = false;
+        await ReloadHistoryUiAsync();
+    }
+
+    private async void ClearHistoryFilter_Click(object sender, RoutedEventArgs e)
+    {
+        _vm.HistoryFilterProfileId = null;
+        _historyFullyLoaded = false;
+        await ReloadHistoryUiAsync();
+    }
+
+    private void HistoryList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_suppressHistorySelection) return;
+        if (HistoryList.SelectedItem is not RunHistoryEntry entry)
+            return;
+
+        NavigateToHistoryArchive(entry);
+    }
+
+    private void NavigateToHistoryArchive(RunHistoryEntry entry)
+    {
+        if (_editingArchiveDisplayName)
+            return;
+
+        var profileItem = _vm.Profiles.FirstOrDefault(p => p.Id == entry.ProfileId);
+        if (profileItem is not null && !ReferenceEquals(_vm.SelectedProfile, profileItem))
+            _vm.SelectedProfile = profileItem;
+
+        if (string.IsNullOrWhiteSpace(entry.ArchivePath))
+            return;
+
+        var match = FindArchiveByPath(entry.ArchivePath);
+        if (match is null)
+        {
+            RefreshArchives();
+            match = FindArchiveByPath(entry.ArchivePath);
+        }
+
+        if (match is not null && !ReferenceEquals(_vm.SelectedArchive, match))
+            _vm.SelectedArchive = match;
+    }
+
+    private ArchiveListItem? FindArchiveByPath(string archivePath)
+    {
+        return _vm.Archives.FirstOrDefault(a =>
+                   string.Equals(a.Path, archivePath, StringComparison.OrdinalIgnoreCase))
+               ?? _vm.Archives.FirstOrDefault(a =>
+                   string.Equals(a.Name, System.IO.Path.GetFileName(archivePath),
+                       StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ArchiveRevealInExplorer_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedArchive is null) return;
+        var path = _vm.SelectedArchive.Path;
+        if (!File.Exists(path))
+        {
+            MessageBox.Show(this, LocalizationService.Text("msg.archiveMissing"),
+                LocalizationService.Text("msg.archivesTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            RefreshArchives();
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{path}\"",
+                UseShellExecute = true
+            });
+            AppLog.Default.Info("App", $"Reveal in explorer: \"{path}\"");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", "Reveal in explorer failed", ex);
+            MessageBox.Show(this, LocalizationService.Text("msg.explorerFailed", ex.Message),
+                LocalizationService.Text("msg.archivesTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ArchiveDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedArchive is null || _vm.IsBusy) return;
+
+        var name = _vm.SelectedArchive.Name;
+        var path = _vm.SelectedArchive.Path;
+        if (MessageBox.Show(this,
+                LocalizationService.Text("msg.deleteArchive", name),
+                LocalizationService.Text("msg.deleteArchiveTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+            ArchiveMetaStore.DeleteForArchive(path);
+            AppLog.Default.Info("App", $"Archive deleted: \"{path}\"");
+            _vm.Status = LocalizationService.Text("status.deleted", name);
+            RefreshArchives();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("App", $"Delete archive failed: \"{path}\"", ex);
+            MessageBox.Show(this, LocalizationService.Text("msg.deleteArchiveFailed", ex.Message),
+                LocalizationService.Text("msg.deleteArchiveTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void OpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedProfile is null) return;
+        var dir = PathHelper.GetProfileArchiveDirectory(_vm.SelectedProfile.Profile);
+        Directory.CreateDirectory(dir);
+        Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+    }
+
+    /// <summary>Drag window from headers / empty space above lists (not from buttons, inputs, lists).</summary>
+    private void MainContent_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Left
+            || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
+            return;
+
+        if (e.OriginalSource is DependencyObject source && IsInteractiveDragBlocker(source))
+            return;
+
+        DragMove();
+    }
+
+    private static bool IsInteractiveDragBlocker(DependencyObject source)
+    {
+        for (DependencyObject? current = source; current is not null;
+             current = System.Windows.Media.VisualTreeHelper.GetParent(current))
+        {
+            if (current is System.Windows.Controls.Primitives.ButtonBase
+                or System.Windows.Controls.Primitives.TextBoxBase
+                or System.Windows.Controls.Primitives.Selector
+                or System.Windows.Controls.PasswordBox
+                or System.Windows.Controls.Primitives.Thumb)
+                return true;
+        }
+
+        return false;
+    }
+
+    private void Window_StateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState != WindowState.Minimized)
+            WindowPlacement.Capture(this, _app.Ui);
+
+        if (WindowState == WindowState.Minimized && _app.Ui.MinimizeToTray)
+        {
+            SaveWindowPlacement();
+            Hide();
+            _tray!.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.minimized"), WinForms.ToolTipIcon.Info);
+            return;
+        }
+
+        ScheduleSaveWindowPlacement();
+    }
+
+    /// <summary>Show window (incl. from tray) and bring to foreground — also used by single-instance activation.</summary>
+    internal void BringToForeground()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+        // Briefly topmost so Windows grants focus when another process launched us.
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
+
+    private void RestoreFromTray() => BringToForeground();
+
+    private void ForceExit_Click(object sender, RoutedEventArgs e)
+    {
+        AppLog.Default.Info("App", "Force exit (History button)");
+        _reallyClose = true;
+        Close();
+    }
+
+    private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_reallyClose)
+        {
+            CleanupOnExit();
+            TryApplyPendingUpdateOnExit();
+            return;
+        }
+
+        // Cannot Close() from inside Closing — ask, then either keep Cancel or allow this close.
+        e.Cancel = true;
+        var dlg = new CloseChoiceWindow { Owner = this };
+        dlg.ShowDialog();
+
+        switch (dlg.Choice)
+        {
+            case CloseChoice.HideToTray:
+                AppLog.Default.Info("App", "User hid app to tray");
+                SaveWindowPlacement();
+                Hide();
+                _tray?.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.running"), WinForms.ToolTipIcon.Info);
+                break;
+            case CloseChoice.Exit:
+                AppLog.Default.Info("App", "User confirmed exit");
+                _reallyClose = true;
+                e.Cancel = false;
+                CleanupOnExit();
+                TryApplyPendingUpdateOnExit();
+                break;
+            case CloseChoice.UpdateFromLocalArchive:
+                // Keep Cancel=true; apply after this Closing handler finishes (same pattern as GitHub update-now).
+                var archivePath = dlg.LocalUpdateArchivePath;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!string.IsNullOrWhiteSpace(archivePath))
+                        ApplyLocalArchiveAndShutdown(archivePath);
+                }));
+                break;
+            default:
+                AppLog.Default.Info("App", "Close cancelled");
+                break;
+        }
+    }
+
+    private void CleanupOnExit()
+    {
+        if (_cleanedUp) return;
+
+        if (_placementSaveTimer is not null)
+        {
+            _placementSaveTimer.Stop();
+            _placementSaveTimer.Tick -= PlacementSaveTimer_Tick;
+            _placementSaveTimer = null;
+        }
+        SaveWindowPlacement(force: true);
+        _cleanedUp = true;
+        AppLog.Default.Info("App", "Main window closing");
+        if (_profilesLiveTimer is not null)
+        {
+            _profilesLiveTimer.Stop();
+            _profilesLiveTimer = null;
+        }
+        _inAppScheduler?.Dispose();
+        _inAppScheduler = null;
+        _watcher.Dispose();
+        if (_tray is not null)
+        {
+            _tray.Visible = false;
+            _tray.Dispose();
+            _tray = null;
+        }
+    }
+
+    private void TryApplyPendingUpdateOnExit()
+    {
+        var zip = _app.Ui.PendingUpdateZipPath;
+        var ver = _app.Ui.PendingUpdateVersion;
+        if (string.IsNullOrWhiteSpace(zip) || string.IsNullOrWhiteSpace(ver))
+            return;
+
+        if (!File.Exists(zip))
+        {
+            AppLog.Default.Warn("Update", $"Pending zip missing: {zip}");
+            return;
+        }
+
+        try
+        {
+            // clear pending so next launch doesn't re-apply
+            _app.Ui.PendingUpdateZipPath = null;
+            _app.Ui.PendingUpdateVersion = null;
+            _settings.Save(_app);
+
+            AppLog.Default.Info("Update", $"Applying deferred update {ver} on exit (no restart)");
+            UpdateInstaller.ApplyAndExit(zip, restart: false);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Update", "Deferred apply failed", ex);
+        }
+    }
+}
