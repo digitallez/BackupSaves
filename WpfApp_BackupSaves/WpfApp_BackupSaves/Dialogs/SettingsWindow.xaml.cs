@@ -1,11 +1,13 @@
-using System.IO;
-using System.Windows;
-using System.Windows.Controls;
-using BackupSaves.Core.Models;
-using BackupSaves.Core.Services;
-using WpfApp_BackupSaves.Services;
-using WpfApp_BackupSaves.ViewModels;
-using WinForms = System.Windows.Forms;
+ using System.Diagnostics;
+ using System.IO;
+ using System.Windows;
+ using System.Windows.Controls;
+ using System.Windows.Documents;
+ using BackupSaves.Core.Models;
+ using BackupSaves.Core.Services;
+ using WpfApp_BackupSaves.Services;
+ using WpfApp_BackupSaves.ViewModels;
+ using WinForms = System.Windows.Forms;
 
 namespace WpfApp_BackupSaves.Dialogs;
 
@@ -44,10 +46,7 @@ public partial class SettingsWindow : Window
         _suppress = true;
         try
         {
-            ThemeCombo.Items.Clear();
-            ThemeCombo.Items.Add(new ThemeItem(AppTheme.Dark, LocalizationService.Text("settings.themeDark")));
-            ThemeCombo.Items.Add(new ThemeItem(AppTheme.Light, LocalizationService.Text("settings.themeLight")));
-            ThemeCombo.DisplayMemberPath = nameof(ThemeItem.Label);
+            FillThemeCombo();
             ThemeCombo.SelectedItem = ThemeCombo.Items.Cast<ThemeItem>()
                 .FirstOrDefault(t => t.Theme == _app.Ui.Theme)
                 ?? ThemeCombo.Items[0];
@@ -69,14 +68,12 @@ public partial class SettingsWindow : Window
                 .FirstOrDefault(l => l.Id.Equals(lang, StringComparison.OrdinalIgnoreCase))
                 ?? LanguageCombo.Items.Cast<LanguageOption>().FirstOrDefault();
 
-            CloseActionCombo.Items.Clear();
-            CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.Ask, LocalizationService.Text("settings.closeAsk")));
-            CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.HideToTray, LocalizationService.Text("settings.closeTray")));
-            CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.Exit, LocalizationService.Text("settings.closeExit")));
-            CloseActionCombo.DisplayMemberPath = nameof(CloseItem.Label);
+            FillCloseActionCombo();
             CloseActionCombo.SelectedItem = CloseActionCombo.Items.Cast<CloseItem>()
                 .FirstOrDefault(c => c.Value == _app.Ui.CloseAction)
                 ?? CloseActionCombo.Items[0];
+
+            CheckUpdatesAutoBox.IsChecked = _app.Ui.CheckForUpdates;
 
             RefreshInstallButton();
             LoadDevFolderPanel();
@@ -130,20 +127,12 @@ public partial class SettingsWindow : Window
         _suppress = true;
         try
         {
-            if (ThemeCombo.SelectedItem is ThemeItem curTheme)
-            {
-                var idx = ThemeCombo.SelectedIndex;
-                ThemeCombo.Items.Clear();
-                ThemeCombo.Items.Add(new ThemeItem(AppTheme.Dark, LocalizationService.Text("settings.themeDark")));
-                ThemeCombo.Items.Add(new ThemeItem(AppTheme.Light, LocalizationService.Text("settings.themeLight")));
-                ThemeCombo.SelectedIndex = idx;
-            }
+            var themeIdx = ThemeCombo.SelectedIndex;
+            FillThemeCombo();
+            ThemeCombo.SelectedIndex = themeIdx;
 
             var closeIdx = CloseActionCombo.SelectedIndex;
-            CloseActionCombo.Items.Clear();
-            CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.Ask, LocalizationService.Text("settings.closeAsk")));
-            CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.HideToTray, LocalizationService.Text("settings.closeTray")));
-            CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.Exit, LocalizationService.Text("settings.closeExit")));
+            FillCloseActionCombo();
             CloseActionCombo.SelectedIndex = closeIdx;
             RefreshInstallButton();
         }
@@ -160,6 +149,35 @@ public partial class SettingsWindow : Window
 
         _app.Ui.CloseAction = item.Value;
         await SaveAsync();
+    }
+
+    private async void CheckUpdatesAuto_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppress)
+            return;
+
+        _app.Ui.CheckForUpdates = CheckUpdatesAutoBox.IsChecked == true;
+        await SaveAsync();
+    }
+
+    private void GitHubReleases_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = GitHubReleaseUpdateChecker.ReleasesPageUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Settings", "Open GitHub releases failed", ex);
+            AppMessageBox.Show(this,
+                LocalizationService.Text("settings.githubReleasesOpenFailed", ex.Message),
+                LocalizationService.Text("settings.githubReleases"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void Logs_Click(object sender, RoutedEventArgs e) => _openLogs();
@@ -288,6 +306,21 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private sealed record ThemeItem(AppTheme Theme, string Label);
-    private sealed record CloseItem(CloseActionPreference Value, string Label);
+    private void FillThemeCombo()
+    {
+        ThemeCombo.Items.Clear();
+        ThemeCombo.Items.Add(new ThemeItem(AppTheme.Dark, LocalizationService.Text("settings.themeDark"), "\uE708"));
+        ThemeCombo.Items.Add(new ThemeItem(AppTheme.Light, LocalizationService.Text("settings.themeLight"), "\uE706"));
+    }
+
+    private void FillCloseActionCombo()
+    {
+        CloseActionCombo.Items.Clear();
+        CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.Ask, LocalizationService.Text("settings.closeAsk"), "\uE897"));
+        CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.HideToTray, LocalizationService.Text("settings.closeTray"), "\uE75B"));
+        CloseActionCombo.Items.Add(new CloseItem(CloseActionPreference.Exit, LocalizationService.Text("settings.closeExit"), "\uE7E8"));
+    }
+
+    private sealed record ThemeItem(AppTheme Theme, string Label, string Icon);
+    private sealed record CloseItem(CloseActionPreference Value, string Label, string Icon);
 }

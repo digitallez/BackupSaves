@@ -9,6 +9,12 @@ public sealed class UiSettings
     /// <summary>Active locale id from Locales JSON (@id), e.g. "ru", "cn". Null = resolve from OS @match.</summary>
     public string? Language { get; set; }
 
+    /// <summary>
+    /// When true: check GitHub on startup and when the close dialog (exit / tray) is shown.
+    /// Manual check in Settings always works. Silent exit/tray preference skips the exit check.
+    /// </summary>
+    public bool CheckForUpdates { get; set; } = true;
+
     /// <summary>Remote version the user chose to ignore (e.g. 1.0.6).</summary>
     public string? SkippedUpdateVersion { get; set; }
 

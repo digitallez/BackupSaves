@@ -21,22 +21,6 @@
           <DockPanel LastChildFill="True"/>
         </ItemsPanelTemplate>
       </StatusBar.ItemsPanel>
-      <StatusBarItem DockPanel.Dock="Right">
-        <StackPanel Orientation="Horizontal">
-          <Button Content="{loc:Loc main.logs}" Padding="10,2" Margin="0,0,8,0"
-                  Click="OpenLogs_Click" ToolTip="{loc:Loc main.logsTooltip}"/>
-          <Button x:Name="ThemeToggleButton" Content="{loc:Loc main.themeLight}" Padding="10,2" Margin="0,0,8,0"
-                  Click="ThemeToggle_Click" ToolTip="{loc:Loc main.themeTooltip}"/>
-          <Button Padding="8,2" Click="OpenSettings_Click"
-                  ToolTip="{loc:Loc main.settingsTooltip}">
-            <StackPanel Orientation="Horizontal">
-              <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="13"
-                         VerticalAlignment="Center" Margin="0,0,6,0"/>
-              <TextBlock Text="{loc:Loc main.settings}" VerticalAlignment="Center"/>
-            </StackPanel>
-          </Button>
-        </StackPanel>
-      </StatusBarItem>
       <StatusBarItem>
         <TextBlock Text="{Binding Status}" Foreground="{DynamicResource PrimaryTextBrush}"/>
       </StatusBarItem>
@@ -682,40 +666,20 @@
       <!-- History -->
       <DockPanel Grid.Column="4">
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" LastChildFill="True">
-          <ComboBox DockPanel.Dock="Right"
-                    MinWidth="110" Height="22" Padding="2,0" FontSize="11"
-                    VerticalAlignment="Center"
-                    ItemsSource="{Binding Languages}"
-                    SelectedItem="{Binding SelectedLanguage}"
-                    ToolTip="{loc:Loc main.languageTooltip}">
-            <ComboBox.ItemTemplate>
-              <DataTemplate>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
-                            ToolTip="{Binding Code}">
-                  <Image Width="16" Height="12"
-                         Stretch="Uniform" VerticalAlignment="Center"
-                         RenderOptions.BitmapScalingMode="HighQuality">
-                    <Image.Style>
-                      <Style TargetType="Image">
-                        <Setter Property="Visibility" Value="Collapsed"/>
-                        <Setter Property="Source" Value="{x:Null}"/>
-                        <Setter Property="Margin" Value="0"/>
-                        <Style.Triggers>
-                          <DataTrigger Binding="{Binding HasFlag}" Value="True">
-                            <Setter Property="Visibility" Value="Visible"/>
-                            <Setter Property="Source" Value="{Binding FlagUri}"/>
-                            <Setter Property="Margin" Value="0,0,4,0"/>
-                          </DataTrigger>
-                        </Style.Triggers>
-                      </Style>
-                    </Image.Style>
-                  </Image>
-                  <TextBlock Text="{Binding Display}"
-                             VerticalAlignment="Center" FontWeight="SemiBold"/>
-                </StackPanel>
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+            <Button x:Name="ThemeToggleButton" Width="28" Height="24" Padding="0" MinWidth="0" MinHeight="0"
+                    Margin="0,0,4,0" Click="ThemeToggle_Click"
+                    ToolTip="{loc:Loc main.themeTooltip}">
+              <TextBlock x:Name="ThemeToggleIcon" Text="&#xE706;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Button>
+            <Button Width="28" Height="24" Padding="0" MinWidth="0" MinHeight="0"
+                    Click="OpenSettings_Click"
+                    ToolTip="{loc:Loc main.settingsTooltip}">
+              <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Button>
+          </StackPanel>
           <Button DockPanel.Dock="Right" Margin="0,0,8,0" Padding="6,0" Height="22" FontSize="11"
                   Content="{loc:Loc main.clearHistoryFilter}"
                   Click="ClearHistoryFilter_Click"

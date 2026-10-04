@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private bool _reallyClose;
     private bool _cleanedUp;
     private bool _updateCheckStarted;
+    private bool _closeDialogFlowBusy;
     private AppSettings _app = new();
     private bool _historyFullyLoaded;
     private int _historyHiddenCount;
@@ -350,7 +351,8 @@ public partial class MainWindow : Window
             if (TryOfferLocalArchiveUpdateAtStartup())
                 return;
 #endif
-            _ = CheckForUpdatesAsync(fromUser: false);
+            if (_app.Ui.CheckForUpdates)
+                _ = CheckForUpdatesAsync(fromUser: false);
         }
     }
 
@@ -637,10 +639,10 @@ public partial class MainWindow : Window
 
     private void UpdateThemeToggleCaption()
     {
-        // Button offers the *other* theme
-        ThemeToggleButton.Content = ThemeManager.Current == AppTheme.Dark
-            ? LocalizationService.Text("main.themeLight")
-            : LocalizationService.Text("main.themeDark");
+        // Icon shows the *other* theme (Brightness = light, QuietHours = dark)
+        ThemeToggleIcon.Text = ThemeManager.Current == AppTheme.Dark
+            ? "\uE706"  // Brightness → switch to light
+            : "\uE708"; // QuietHours → switch to dark
     }
 
     private void ReloadProfilesUi()
@@ -1954,12 +1956,14 @@ public partial class MainWindow : Window
         var preference = _app.Ui.CloseAction;
         if (!forceAsk && preference == CloseActionPreference.HideToTray)
         {
+            // Remembered preference: no close dialog → no update check on exit.
             ApplyHideToTray();
             return;
         }
 
         if (!forceAsk && preference == CloseActionPreference.Exit)
         {
+            // Remembered preference: no close dialog → no update check on exit.
             AppLog.Default.Info("App", "Exit via remembered preference");
             _reallyClose = true;
             e.Cancel = false;
@@ -1968,49 +1972,66 @@ public partial class MainWindow : Window
             return;
         }
 
-        var dlg = new CloseChoiceWindow(_app) { Owner = this };
-        dlg.ShowDialog();
+        // Close dialog will be shown — optionally check updates first, then ask.
+        if (_closeDialogFlowBusy)
+            return;
 
-        if (dlg.RememberChoice
-            && (dlg.Choice is CloseChoice.HideToTray or CloseChoice.Exit))
-        {
-            _app.Ui.CloseAction = dlg.Choice == CloseChoice.HideToTray
-                ? CloseActionPreference.HideToTray
-                : CloseActionPreference.Exit;
-            try
-            {
-                _settings.Save(_app);
-            }
-            catch (Exception ex)
-            {
-                AppLog.Default.Error("Settings", "Failed to save close preference", ex);
-            }
-        }
+        _closeDialogFlowBusy = true;
+        Dispatcher.BeginInvoke(new Action(() => _ = RunCloseDialogFlowAsync()));
+    }
 
-        switch (dlg.Choice)
+    private async Task RunCloseDialogFlowAsync()
+    {
+        try
         {
-            case CloseChoice.HideToTray:
-                ApplyHideToTray();
-                break;
-            case CloseChoice.Exit:
-                AppLog.Default.Info("App", "User confirmed exit");
-                _reallyClose = true;
-                e.Cancel = false;
-                CleanupOnExit();
-                TryApplyPendingUpdateOnExit();
-                break;
-            case CloseChoice.UpdateFromLocalArchive:
-                // Keep Cancel=true; apply after this Closing handler finishes (same pattern as GitHub update-now).
-                var candidate = dlg.LocalUpdate;
-                Dispatcher.BeginInvoke(new Action(() =>
+            if (_app.Ui.CheckForUpdates)
+                await CheckForUpdatesAsync(fromUser: false);
+
+            if (_reallyClose)
+                return;
+
+            var dlg = new CloseChoiceWindow(_app) { Owner = this };
+            dlg.ShowDialog();
+
+            if (dlg.RememberChoice
+                && (dlg.Choice is CloseChoice.HideToTray or CloseChoice.Exit))
+            {
+                _app.Ui.CloseAction = dlg.Choice == CloseChoice.HideToTray
+                    ? CloseActionPreference.HideToTray
+                    : CloseActionPreference.Exit;
+                try
                 {
+                    _settings.Save(_app);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Default.Error("Settings", "Failed to save close preference", ex);
+                }
+            }
+
+            switch (dlg.Choice)
+            {
+                case CloseChoice.HideToTray:
+                    ApplyHideToTray();
+                    break;
+                case CloseChoice.Exit:
+                    AppLog.Default.Info("App", "User confirmed exit");
+                    _reallyClose = true;
+                    Close();
+                    break;
+                case CloseChoice.UpdateFromLocalArchive:
+                    var candidate = dlg.LocalUpdate;
                     if (candidate is not null)
                         ApplyLocalCandidateAndShutdown(candidate);
-                }));
-                break;
-            default:
-                AppLog.Default.Info("App", "Close cancelled");
-                break;
+                    break;
+                default:
+                    AppLog.Default.Info("App", "Close cancelled");
+                    break;
+            }
+        }
+        finally
+        {
+            _closeDialogFlowBusy = false;
         }
     }
 

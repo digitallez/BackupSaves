@@ -17,7 +17,17 @@
     <StackPanel Margin="20">
       <TextBlock Text="{loc:Loc settings.theme}" FontWeight="SemiBold" Margin="0,0,0,6"/>
       <ComboBox x:Name="ThemeCombo" Height="30" Margin="0,0,0,14"
-                SelectionChanged="ThemeCombo_SelectionChanged"/>
+                SelectionChanged="ThemeCombo_SelectionChanged">
+        <ComboBox.ItemTemplate>
+          <DataTemplate>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                         VerticalAlignment="Center" Margin="0,0,8,0"/>
+              <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+            </StackPanel>
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
 
       <TextBlock Text="{loc:Loc settings.language}" FontWeight="SemiBold" Margin="0,0,0,6"/>
       <ComboBox x:Name="LanguageCombo" Height="30" Margin="0,0,0,14"
@@ -50,32 +60,67 @@
                  ToolTip="{loc:Loc settings.closeActionTip}"/>
       <ComboBox x:Name="CloseActionCombo" Height="30" Margin="0,0,0,18"
                 SelectionChanged="CloseActionCombo_SelectionChanged"
-                ToolTip="{loc:Loc settings.closeActionTip}"/>
+                ToolTip="{loc:Loc settings.closeActionTip}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                         VerticalAlignment="Center" Margin="0,0,8,0"/>
+              <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+            </StackPanel>
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
 
       <Button Height="34" Margin="0,0,0,8" Click="Logs_Click"
               ToolTip="{loc:Loc main.logsTooltip}">
         <StackPanel Orientation="Horizontal">
           <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"
                      VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBlock Text="{loc:Loc main.logs}" VerticalAlignment="Center"/>
+          <TextBlock Text="{loc:Loc settings.openLogsFolder}" VerticalAlignment="Center"/>
         </StackPanel>
       </Button>
-      <Button Height="34" Margin="0,0,0,8" Click="CheckUpdates_Click"
-              ToolTip="{loc:Loc settings.checkUpdatesTip}">
-        <StackPanel Orientation="Horizontal">
-          <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="14"
-                     VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBlock Text="{loc:Loc settings.checkUpdates}" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-      <Button x:Name="InstallButton" Height="34" Margin="0,0,0,14" Click="Install_Click"
-              ToolTip="{loc:Loc settings.installTip}">
-        <StackPanel Orientation="Horizontal">
-          <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="14"
-                     VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBlock x:Name="InstallButtonText" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
+      <StackPanel Margin="0,0,0,8">
+        <DockPanel LastChildFill="True">
+          <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0,0,0">
+            <Hyperlink Click="GitHubReleases_Click"
+                       ToolTip="{loc:Loc settings.githubReleasesTip}">
+              <Run Text="{loc:Loc settings.githubReleases}"/>
+            </Hyperlink>
+          </TextBlock>
+          <CheckBox x:Name="CheckUpdatesAutoBox"
+                    Content="{loc:Loc settings.checkUpdatesAuto}"
+                    ToolTip="{loc:Loc settings.checkUpdatesAutoTip}"
+                    VerticalAlignment="Center"
+                    Checked="CheckUpdatesAuto_Changed"
+                    Unchecked="CheckUpdatesAuto_Changed"/>
+        </DockPanel>
+        <TextBlock Text="{loc:Loc settings.checkUpdatesAutoTip}" FontSize="11" TextWrapping="Wrap"
+                   Foreground="{DynamicResource SecondaryTextBrush}"
+                   Margin="18,4,0,8"/>
+        <Button Height="34" Click="CheckUpdates_Click"
+                ToolTip="{loc:Loc settings.checkUpdatesTip}">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBlock Text="{loc:Loc settings.checkUpdates}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+      </StackPanel>
+      <StackPanel Margin="0,0,0,14">
+        <Button x:Name="InstallButton" Height="34" Click="Install_Click"
+                ToolTip="{loc:Loc settings.installTip}"
+                HorizontalContentAlignment="Left">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBlock x:Name="InstallButtonText" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+        <TextBlock Text="{loc:Loc settings.installTip}" FontSize="11" TextWrapping="Wrap"
+                   Foreground="{DynamicResource SecondaryTextBrush}"
+                   Margin="2,4,0,0"/>
+      </StackPanel>
 
       <StackPanel x:Name="DevFolderPanel" Visibility="Collapsed" Margin="0,0,0,14">
         <TextBlock Text="{loc:Loc settings.devFolder}" FontWeight="SemiBold" Margin="0,0,0,6"

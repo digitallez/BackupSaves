@@ -25,6 +25,7 @@ public sealed class GitHubReleaseUpdateChecker : IUpdateChecker
 {
     public const string Owner = "digitallez";
     public const string Repo = "BackupSaves";
+    public const string ReleasesPageUrl = $"https://github.com/{Owner}/{Repo}/releases";
 
     private static readonly HttpClient Http = CreateClient();
 
