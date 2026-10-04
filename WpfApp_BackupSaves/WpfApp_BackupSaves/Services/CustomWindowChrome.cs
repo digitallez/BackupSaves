@@ -38,6 +38,8 @@ public static class CustomWindowChrome
         if (window.Content is not UIElement content)
             return;
 
+        // Content is still the window's logical child; detach before reparenting.
+        window.Content = null;
         var outline = new Border
         {
             Tag = OutlineTag,
