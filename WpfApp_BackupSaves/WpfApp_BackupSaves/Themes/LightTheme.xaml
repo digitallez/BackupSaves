@@ -29,6 +29,10 @@
   <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="#E5E5E5"/>
   <SolidColorBrush x:Key="TooltipBackgroundBrush" Color="#FFFFFF"/>
   <SolidColorBrush x:Key="TooltipForegroundBrush" Color="#1A1A1A"/>
+  <SolidColorBrush x:Key="ScrollBarTrackBrush" Color="#F0F0F0"/>
+  <SolidColorBrush x:Key="ScrollBarThumbBrush" Color="#C1C1C1"/>
+  <SolidColorBrush x:Key="ScrollBarThumbHoverBrush" Color="#A8A8A8"/>
+  <SolidColorBrush x:Key="ScrollBarThumbPressedBrush" Color="#8E8E8E"/>
   <SolidColorBrush x:Key="{x:Static SystemColors.InfoBrushKey}" Color="#FFFFFF"/>
   <SolidColorBrush x:Key="{x:Static SystemColors.InfoTextBrushKey}" Color="#1A1A1A"/>
 </ResourceDictionary>

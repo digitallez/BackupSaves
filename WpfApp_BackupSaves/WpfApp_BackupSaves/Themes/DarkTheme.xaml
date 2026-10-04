@@ -29,6 +29,10 @@
   <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="#3E3E42"/>
   <SolidColorBrush x:Key="TooltipBackgroundBrush" Color="#2D2D2D"/>
   <SolidColorBrush x:Key="TooltipForegroundBrush" Color="#E8E8E8"/>
+  <SolidColorBrush x:Key="ScrollBarTrackBrush" Color="#252526"/>
+  <SolidColorBrush x:Key="ScrollBarThumbBrush" Color="#686868"/>
+  <SolidColorBrush x:Key="ScrollBarThumbHoverBrush" Color="#9E9E9E"/>
+  <SolidColorBrush x:Key="ScrollBarThumbPressedBrush" Color="#B0B0B0"/>
   <!-- Default string ToolTips use system Info* brushes -->
   <SolidColorBrush x:Key="{x:Static SystemColors.InfoBrushKey}" Color="#2D2D2D"/>
   <SolidColorBrush x:Key="{x:Static SystemColors.InfoTextBrushKey}" Color="#E8E8E8"/>
