@@ -86,12 +86,8 @@ public partial class SettingsWindow : Window
 
     private void LoadDevFolderPanel()
     {
-#if DEBUG
         DevFolderPanel.Visibility = Visibility.Visible;
         DevFolderBox.Text = _app.Ui.DevBuildFolder ?? "";
-#else
-        DevFolderPanel.Visibility = Visibility.Collapsed;
-#endif
     }
 
     private void RefreshInstallButton()
@@ -247,10 +243,8 @@ public partial class SettingsWindow : Window
         }
     }
 
-    // Wired from XAML (panel is Collapsed in Release).
     private async void DevFolderBrowse_Click(object sender, RoutedEventArgs e)
     {
-#if DEBUG
         using var dlg = new WinForms.FolderBrowserDialog
         {
             Description = LocalizationService.Text("settings.devFolder"),
@@ -264,23 +258,15 @@ public partial class SettingsWindow : Window
 
         DevFolderBox.Text = dlg.SelectedPath;
         await SaveDevFolderAsync();
-#else
-        await Task.CompletedTask;
-#endif
     }
 
     private async void DevFolderBox_LostFocus(object sender, RoutedEventArgs e)
     {
-#if DEBUG
         if (_suppress)
             return;
         await SaveDevFolderAsync();
-#else
-        await Task.CompletedTask;
-#endif
     }
 
-#if DEBUG
     private async Task SaveDevFolderAsync()
     {
         var path = DevFolderBox.Text.Trim();
@@ -292,13 +278,10 @@ public partial class SettingsWindow : Window
         await SaveAsync();
         AppLog.Default.Info("Settings", $"DevBuildFolder set to \"{normalized}\"");
     }
-#endif
 
     private async void Ok_Click(object sender, RoutedEventArgs e)
     {
-#if DEBUG
         await SaveDevFolderAsync();
-#endif
         DialogResult = true;
         Close();
     }

@@ -110,7 +110,7 @@
   "settings.installed": "Install… (already installed)",
   "settings.installTip": "Copy the app to %LocalAppData%\\BackupSaves and create a desktop shortcut",
   "settings.devFolder": "Development folder",
-  "settings.devFolderTip": "Path to the Debug/publish output folder. On startup, if BackupSaves.exe there is newer, an update will be offered.",
+  "settings.devFolderTip": "Path to the Debug/publish output folder. When set, version checks include it (Debug at the same number ranks above Release).",
   "settings.devFolderBrowse": "Browse…",
   "settings.upToDate": "You already have the latest version ({0}).",
   "install.firstTitle": "Install BackupSaves",

@@ -9,7 +9,7 @@ using SharpCompress.Common;
 
 namespace WpfApp_BackupSaves.Services;
 
-/// <summary>Debug local update source: archive file or build-output directory.</summary>
+/// <summary>Local update source: archive file or build-output directory.</summary>
 public sealed class LocalUpdateCandidate
 {
     public required string DisplayPath { get; init; }
@@ -58,14 +58,16 @@ public static class UpdateInstaller
     }
 
     /// <summary>
-    /// Debug update priority:
+    /// Local update priority:
     /// <list type="number">
     /// <item>Development folder (<paramref name="preferredFolder"/>) — newer exe, else archive in that folder</item>
-    /// <item>Archive next to the running program</item>
+    /// <item>Archive next to the running program (when <paramref name="includeBesideAppArchives"/>)</item>
     /// </list>
     /// GitHub is checked separately after local sources.
     /// </summary>
-    public static LocalUpdateCandidate? FindLocalUpdateCandidate(string? preferredFolder)
+    public static LocalUpdateCandidate? FindLocalUpdateCandidate(
+        string? preferredFolder,
+        bool includeBesideAppArchives = true)
     {
         // 1) Dev folder
         if (!string.IsNullOrWhiteSpace(preferredFolder))
@@ -80,30 +82,33 @@ public static class UpdateInstaller
         }
 
         // 2) Archive beside the running app (not a build-directory exe)
-        foreach (var dir in EnumerateAppDirs())
+        if (includeBesideAppArchives)
         {
-            if (!string.IsNullOrWhiteSpace(preferredFolder)
-                && PathsEqual(dir, preferredFolder))
-                continue;
-
-            var archive = FindArchiveInDirectory(dir);
-            if (archive is null)
-                continue;
-
-            var archiveNewer = IsLocalArchiveLikelyNewer(archive);
-            if (!archiveNewer)
-                continue;
-
-            AppLog.Default.Info("Update",
-                $"App-folder archive candidate: \"{archive}\" newer={archiveNewer}");
-            return new LocalUpdateCandidate
+            foreach (var dir in EnumerateAppDirs())
             {
-                DisplayPath = archive,
-                ArchivePath = archive,
-                VersionLabel = Path.GetFileName(archive),
-                FingerprintKey = GetLocalArchiveKey(archive) ?? archive,
-                IsNewer = archiveNewer
-            };
+                if (!string.IsNullOrWhiteSpace(preferredFolder)
+                    && PathsEqual(dir, preferredFolder))
+                    continue;
+
+                var archive = FindArchiveInDirectory(dir);
+                if (archive is null)
+                    continue;
+
+                var archiveNewer = IsLocalArchiveLikelyNewer(archive);
+                if (!archiveNewer)
+                    continue;
+
+                AppLog.Default.Info("Update",
+                    $"App-folder archive candidate: \"{archive}\" newer={archiveNewer}");
+                return new LocalUpdateCandidate
+                {
+                    DisplayPath = archive,
+                    ArchivePath = archive,
+                    VersionLabel = Path.GetFileName(archive),
+                    FingerprintKey = GetLocalArchiveKey(archive) ?? archive,
+                    IsNewer = archiveNewer
+                };
+            }
         }
 
         AppLog.Default.Info("Update",

@@ -74,17 +74,11 @@ public sealed class GitHubReleaseUpdateChecker : IUpdateChecker
                          ?.ToString()
                       ?? release.TagName.TrimStart('v', 'V');
 
-        if (!AppVersion.ShouldOfferUpdate(version, AppVersion.Numeric, AppVersion.IsDebug))
+        if (!AppVersion.ShouldOfferUpdate(version, AppVersion.Numeric))
         {
             AppLog.Default.Info("Update",
                 $"Up to date (local={AppVersion.Current}, remote={version})");
             return null;
-        }
-
-        if (AppVersion.IsDebug && !AppVersion.IsNewer(version, AppVersion.Numeric))
-        {
-            AppLog.Default.Info("Update",
-                $"Debug build: offering same-number Release {version} to replace {AppVersion.Current}");
         }
 
         return new ReleaseInfo

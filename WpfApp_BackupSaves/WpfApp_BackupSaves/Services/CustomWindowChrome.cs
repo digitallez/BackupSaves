@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Shell;
 
 namespace WpfApp_BackupSaves.Services;
@@ -7,6 +8,7 @@ namespace WpfApp_BackupSaves.Services;
 public static class CustomWindowChrome
 {
     public const double CaptionHeight = 32;
+    private const string OutlineTag = "WindowOutline";
 
     public static void Apply(Window window)
     {
@@ -23,5 +25,28 @@ public static class CustomWindowChrome
             CornerRadius = new CornerRadius(0),
             UseAeroCaptionButtons = false
         });
+
+        AttachOutline(window);
+    }
+
+    /// <summary>1px client border. System chrome is off, so DWM border color never shows.</summary>
+    private static void AttachOutline(Window window)
+    {
+        if (window.Content is Border { Tag: OutlineTag })
+            return;
+
+        if (window.Content is not UIElement content)
+            return;
+
+        var outline = new Border
+        {
+            Tag = OutlineTag,
+            BorderThickness = new Thickness(1),
+            SnapsToDevicePixels = true,
+            UseLayoutRounding = true,
+            Child = content
+        };
+        outline.SetResourceReference(Border.BorderBrushProperty, "WindowBorderBrush");
+        window.Content = outline;
     }
 }

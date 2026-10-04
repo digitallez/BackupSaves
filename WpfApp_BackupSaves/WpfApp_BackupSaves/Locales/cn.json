@@ -110,7 +110,7 @@
   "settings.installed": "安装…（已安装）",
   "settings.installTip": "将程序复制到 %LocalAppData%\\BackupSaves 并创建桌面快捷方式",
   "settings.devFolder": "开发文件夹",
-  "settings.devFolderTip": "Debug/publish 输出文件夹路径。启动时若其中的 BackupSaves.exe 更新，将提示升级。",
+  "settings.devFolderTip": "Debug/publish 输出文件夹路径。设置后会参与版本检查（同号 Debug 高于 Release）。",
   "settings.devFolderBrowse": "浏览…",
   "settings.upToDate": "已是最新版本（{0}）。",
   "install.firstTitle": "安装 BackupSaves",

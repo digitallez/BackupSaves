@@ -32,14 +32,15 @@ public sealed class UiSettings
     public string? PendingUpdateZipPath { get; set; }
 
     /// <summary>
-    /// Debug: fingerprint of local build-folder archive already applied (length:mtimeUtcTicks:fileName).
-    /// Used to avoid re-prompting the same archive on every startup.
+    /// Fingerprint of local build-folder archive/exe already applied (length:mtimeUtcTicks:…).
+    /// Used to avoid re-prompting the same candidate on every startup.
     /// </summary>
     public string? LastAppliedLocalArchiveKey { get; set; }
 
     /// <summary>
-    /// Debug: path to the development/build output folder.
-    /// On startup the installed app compares versions with BackupSaves.exe there and may offer an update.
+    /// Path to the development/build output folder.
+    /// When set, version checks include BackupSaves.exe / archives there
+    /// (Debug builds rank above same-number Release).
     /// </summary>
     public string? DevBuildFolder { get; set; }
 

@@ -101,7 +101,7 @@ public static class AppVersion
     /// <summary>
     /// True when <paramref name="candidate"/> is a newer build than <paramref name="current"/>,
     /// including Debug stamps (<c>1.0.0-debug-yyMMddHHmmss</c>).
-    /// Same numeric + newer stamp → newer; Release equal to Debug numeric → newer (replace debug).
+    /// Same numeric + newer stamp → newer; Debug at the same number is newer than Release.
     /// </summary>
     public static bool IsBuildNewer(string? candidate, string? current)
     {
@@ -123,24 +123,19 @@ public static class AppVersion
         if (cStamp is not null && curStamp is not null)
             return cStamp > curStamp;
 
-        // Release (no stamp) replaces Debug at the same number.
-        if (curStamp is not null && cStamp is null)
+        // Debug (stamp) ranks above Release at the same number (1.0.0-debug > 1.0.0).
+        if (cStamp is not null && curStamp is null)
             return true;
 
         return false;
     }
 
     /// <summary>
-    /// Offer update when remote is newer, or when local is Debug and remote equals the same number
-    /// (so 1.0.0-debug can replace itself with Release 1.0.0).
+    /// Offer a GitHub Release when its numeric version is strictly greater than the installed one.
+    /// Same-number Release is not offered over a Debug build (Debug ranks higher).
     /// </summary>
-    public static bool ShouldOfferUpdate(string remoteTagOrVersion, Version current, bool localIsDebug)
+    public static bool ShouldOfferUpdate(string remoteTagOrVersion, Version current)
     {
-        var remote = ParseCore(remoteTagOrVersion);
-        if (remote is null)
-            return false;
-        if (remote > current)
-            return true;
-        return localIsDebug && remote == current;
+        return IsNewer(remoteTagOrVersion, current);
     }
 }

@@ -110,7 +110,7 @@
   "settings.installed": "Встановити… (вже встановлено)",
   "settings.installTip": "Скопіювати програму в %LocalAppData%\\BackupSaves і створити ярлик на робочому столі",
   "settings.devFolder": "Папка розробки",
-  "settings.devFolderTip": "Шлях до вихідної папки Debug/publish. Під час запуску, якщо там новіша версія BackupSaves.exe — буде запропоновано оновлення.",
+  "settings.devFolderTip": "Шлях до вихідної папки Debug/publish. Якщо задано — бере участь у перевірці версій (Debug з тим самим номером вищий за Release).",
   "settings.devFolderBrowse": "Огляд…",
   "settings.upToDate": "У вас актуальна версія ({0}).",
   "install.firstTitle": "Встановлення BackupSaves",

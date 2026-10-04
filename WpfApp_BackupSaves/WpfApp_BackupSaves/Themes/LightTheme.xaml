@@ -6,6 +6,7 @@
   <SolidColorBrush x:Key="PrimaryTextBrush" Color="#1A1A1A"/>
   <SolidColorBrush x:Key="SecondaryTextBrush" Color="#666666"/>
   <SolidColorBrush x:Key="BorderBrushKey" Color="#DDDDDD"/>
+  <SolidColorBrush x:Key="WindowBorderBrush" Color="#404040"/>
   <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#FFFFFF"/>
   <SolidColorBrush x:Key="ControlForegroundBrush" Color="#1A1A1A"/>
   <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#F0F0F0"/>

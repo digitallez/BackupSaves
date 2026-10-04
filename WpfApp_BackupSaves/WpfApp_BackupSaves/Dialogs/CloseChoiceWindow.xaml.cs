@@ -35,11 +35,9 @@ public partial class CloseChoiceWindow : Window
     /// <summary>Whether the close dialog should be forced (ignore remembered preference).</summary>
     public static bool ShouldForceShowDialog(AppSettings? app = null)
     {
-#if DEBUG
-        var candidate = UpdateInstaller.FindLocalUpdateCandidate(app?.Ui.DevBuildFolder);
+        var candidate = ResolveLocalUpdateCandidate(app);
         if (candidate is { IsNewer: true })
             return true;
-#endif
         if (app?.Ui.PendingUpdateZipPath is { Length: > 0 } zip && File.Exists(zip))
             return true;
         return false;
@@ -47,8 +45,7 @@ public partial class CloseChoiceWindow : Window
 
     private void TryShowLocalUpdateOption()
     {
-#if DEBUG
-        LocalUpdate = UpdateInstaller.FindLocalUpdateCandidate(_app?.Ui.DevBuildFolder);
+        LocalUpdate = ResolveLocalUpdateCandidate(_app);
         if (LocalUpdate is not { IsNewer: true })
         {
             LocalUpdate = null;
@@ -63,6 +60,20 @@ public partial class CloseChoiceWindow : Window
         UpdateFromArchiveButton.ToolTip = LocalizationService.Text("update.localNowTip");
         UpdateFromArchiveButton.Visibility = Visibility.Visible;
         HasUpdateOption = true;
+    }
+
+    /// <summary>
+    /// Debug: always scan local sources. Release: only when DevBuildFolder is set.
+    /// </summary>
+    private static LocalUpdateCandidate? ResolveLocalUpdateCandidate(AppSettings? app)
+    {
+        var folder = app?.Ui.DevBuildFolder;
+#if DEBUG
+        return UpdateInstaller.FindLocalUpdateCandidate(folder, includeBesideAppArchives: true);
+#else
+        if (string.IsNullOrWhiteSpace(folder))
+            return null;
+        return UpdateInstaller.FindLocalUpdateCandidate(folder, includeBesideAppArchives: false);
 #endif
     }
 
