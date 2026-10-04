@@ -1,7 +1,14 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace BackupSaves.Core.Models;
 
 public sealed class ScheduleConfig
 {
+    /// <summary>Unknown JSON fields kept across load/save so older builds do not wipe newer settings.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
     /// <summary>Windows Task Scheduler registration.</summary>
     public bool Enabled { get; set; }
 

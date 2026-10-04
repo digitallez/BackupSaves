@@ -1,7 +1,14 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace BackupSaves.Core.Models;
 
 public sealed class BackupProfile
 {
+    /// <summary>Unknown JSON fields kept across load/save so older builds do not wipe newer settings.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = "";
     public string Slug { get; set; } = "";

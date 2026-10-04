@@ -13,6 +13,10 @@ public interface ISettingsStore
     Task SaveAsync(AppSettings settings, CancellationToken ct = default);
 }
 
+/// <summary>
+/// Persists <see cref="AppSettings"/>. Models use <see cref="System.Text.Json.Serialization.JsonExtensionDataAttribute"/>
+/// so unknown JSON properties survive round-trips (older builds must not wipe newer fields).
+/// </summary>
 public sealed class SettingsStore : ISettingsStore
 {
     public const string AppFolderName = "BackupSaves";
