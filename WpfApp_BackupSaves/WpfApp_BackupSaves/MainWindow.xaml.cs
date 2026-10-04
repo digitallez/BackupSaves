@@ -347,46 +347,58 @@ public partial class MainWindow : Window
         if (!_updateCheckStarted)
         {
             _updateCheckStarted = true;
-#if DEBUG
-            if (TryOfferLocalArchiveUpdateAtStartup())
-                return;
-#endif
             if (_app.Ui.CheckForUpdates)
                 _ = CheckForUpdatesAsync(fromUser: false);
         }
     }
 
 #if DEBUG
+    private enum LocalUpdateOfferResult
+    {
+        None,
+        Declined,
+        Applied
+    }
+
     /// <summary>
-    /// Debug: if a newer build exists in DevBuildFolder (or archive next to the exe), offer update.
-    /// Returns true when the app is shutting down to apply the update.
+    /// Debug priority 1–2: DevBuildFolder, then archive next to the exe.
     /// </summary>
-    private bool TryOfferLocalArchiveUpdateAtStartup()
+    private LocalUpdateOfferResult TryOfferLocalUpdate(bool fromUser)
+    {
+        var candidate = UpdateInstaller.FindLocalUpdateCandidate(_app.Ui.DevBuildFolder);
+        if (candidate is null || !candidate.IsNewer)
+            return LocalUpdateOfferResult.None;
+
+        if (!fromUser
+            && string.Equals(_app.Ui.LastAppliedLocalArchiveKey, candidate.FingerprintKey, StringComparison.Ordinal))
+        {
+            AppLog.Default.Info("Update",
+                $"Debug: local build already applied ({candidate.FingerprintKey}), skip prompt");
+            return LocalUpdateOfferResult.None;
+        }
+
+        AppLog.Default.Info("Update",
+            $"Debug: offer local \"{candidate.DisplayPath}\" v={candidate.VersionLabel} newer={candidate.IsNewer}");
+
+        var dlg = new LocalArchiveUpdateWindow(candidate) { Owner = OwnerForDialogs() };
+        dlg.ShowDialog();
+        if (!dlg.Accepted)
+        {
+            AppLog.Default.Info("Update", "Debug: user postponed local build update");
+            return LocalUpdateOfferResult.Declined;
+        }
+
+        ApplyLocalCandidateAndShutdown(candidate);
+        return LocalUpdateOfferResult.Applied;
+    }
+
+    /// <summary>True when a newer local candidate exists and was not already applied.</summary>
+    private bool HasPendingLocalUpdateOffer()
     {
         var candidate = UpdateInstaller.FindLocalUpdateCandidate(_app.Ui.DevBuildFolder);
         if (candidate is null || !candidate.IsNewer)
             return false;
-
-        if (string.Equals(_app.Ui.LastAppliedLocalArchiveKey, candidate.FingerprintKey, StringComparison.Ordinal))
-        {
-            AppLog.Default.Info("Update",
-                $"Debug startup: local build already applied ({candidate.FingerprintKey}), skip prompt");
-            return false;
-        }
-
-        AppLog.Default.Info("Update",
-            $"Debug startup: local build \"{candidate.DisplayPath}\" v={candidate.VersionLabel} newer={candidate.IsNewer}");
-
-        var dlg = new LocalArchiveUpdateWindow(candidate) { Owner = this };
-        dlg.ShowDialog();
-        if (!dlg.Accepted)
-        {
-            AppLog.Default.Info("Update", "Debug startup: user postponed local build update");
-            return false;
-        }
-
-        ApplyLocalCandidateAndShutdown(candidate);
-        return true;
+        return !string.Equals(_app.Ui.LastAppliedLocalArchiveKey, candidate.FingerprintKey, StringComparison.Ordinal);
     }
 #endif
 
@@ -438,6 +450,14 @@ public partial class MainWindow : Window
     {
         try
         {
+#if DEBUG
+            // Debug priority: 1) dev folder 2) archive beside app 3) GitHub
+            var local = TryOfferLocalUpdate(fromUser);
+            if (local == LocalUpdateOfferResult.Applied)
+                return;
+            if (local == LocalUpdateOfferResult.Declined && !fromUser)
+                return;
+#endif
             var release = await _updateChecker.GetNewerReleaseAsync();
             if (release is null)
             {
@@ -1984,8 +2004,16 @@ public partial class MainWindow : Window
     {
         try
         {
+            // When the close dialog itself can offer a local DEBUG update, skip GitHub here
+            // so local sources stay ahead of GitHub. Otherwise run the normal check chain.
+#if DEBUG
+            var localOnClose = HasPendingLocalUpdateOffer();
+            if (_app.Ui.CheckForUpdates && !localOnClose)
+                await CheckForUpdatesAsync(fromUser: false);
+#else
             if (_app.Ui.CheckForUpdates)
                 await CheckForUpdatesAsync(fromUser: false);
+#endif
 
             if (_reallyClose)
                 return;

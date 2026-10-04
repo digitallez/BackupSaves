@@ -58,11 +58,16 @@ public static class UpdateInstaller
     }
 
     /// <summary>
-    /// Debug: find a newer local build to offer as an update.
-    /// Prefers <paramref name="preferredFolder"/> (exe version compare), then archives next to the running exe.
+    /// Debug update priority:
+    /// <list type="number">
+    /// <item>Development folder (<paramref name="preferredFolder"/>) — newer exe, else archive in that folder</item>
+    /// <item>Archive next to the running program</item>
+    /// </list>
+    /// GitHub is checked separately after local sources.
     /// </summary>
     public static LocalUpdateCandidate? FindLocalUpdateCandidate(string? preferredFolder)
     {
+        // 1) Dev folder
         if (!string.IsNullOrWhiteSpace(preferredFolder))
         {
             var fromDev = TryCandidateFromDirectory(preferredFolder, onlyIfNewer: true);
@@ -74,19 +79,31 @@ public static class UpdateInstaller
             }
         }
 
+        // 2) Archive beside the running app (not a build-directory exe)
         foreach (var dir in EnumerateAppDirs())
         {
             if (!string.IsNullOrWhiteSpace(preferredFolder)
                 && PathsEqual(dir, preferredFolder))
                 continue;
 
-            var fromApp = TryCandidateFromDirectory(dir, onlyIfNewer: true);
-            if (fromApp is not null)
+            var archive = FindArchiveInDirectory(dir);
+            if (archive is null)
+                continue;
+
+            var archiveNewer = IsLocalArchiveLikelyNewer(archive);
+            if (!archiveNewer)
+                continue;
+
+            AppLog.Default.Info("Update",
+                $"App-folder archive candidate: \"{archive}\" newer={archiveNewer}");
+            return new LocalUpdateCandidate
             {
-                AppLog.Default.Info("Update",
-                    $"Local candidate next to app: \"{fromApp.DisplayPath}\" v={fromApp.VersionLabel}");
-                return fromApp;
-            }
+                DisplayPath = archive,
+                ArchivePath = archive,
+                VersionLabel = Path.GetFileName(archive),
+                FingerprintKey = GetLocalArchiveKey(archive) ?? archive,
+                IsNewer = archiveNewer
+            };
         }
 
         AppLog.Default.Info("Update",

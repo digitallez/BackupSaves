@@ -247,9 +247,10 @@ public partial class SettingsWindow : Window
         }
     }
 
-#if DEBUG
+    // Wired from XAML (panel is Collapsed in Release).
     private async void DevFolderBrowse_Click(object sender, RoutedEventArgs e)
     {
+#if DEBUG
         using var dlg = new WinForms.FolderBrowserDialog
         {
             Description = LocalizationService.Text("settings.devFolder"),
@@ -263,15 +264,23 @@ public partial class SettingsWindow : Window
 
         DevFolderBox.Text = dlg.SelectedPath;
         await SaveDevFolderAsync();
+#else
+        await Task.CompletedTask;
+#endif
     }
 
     private async void DevFolderBox_LostFocus(object sender, RoutedEventArgs e)
     {
+#if DEBUG
         if (_suppress)
             return;
         await SaveDevFolderAsync();
+#else
+        await Task.CompletedTask;
+#endif
     }
 
+#if DEBUG
     private async Task SaveDevFolderAsync()
     {
         var path = DevFolderBox.Text.Trim();
