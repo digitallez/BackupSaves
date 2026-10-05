@@ -9,6 +9,8 @@ public interface IHistoryStore
     string HistoryPath { get; }
     Task<IReadOnlyList<RunHistoryEntry>> LoadAsync(CancellationToken ct = default);
     Task AppendAsync(RunHistoryEntry entry, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid entryId, CancellationToken ct = default);
+    Task<int> DeleteWhereAsync(Func<RunHistoryEntry, bool> predicate, CancellationToken ct = default);
 }
 
 public sealed class HistoryStore : IHistoryStore
@@ -66,6 +68,49 @@ public sealed class HistoryStore : IHistoryStore
             if (list.Count > MaxEntries)
                 list = list.Take(MaxEntries).ToList();
             await SaveUnlockedAsync(list, ct);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<bool> DeleteAsync(Guid entryId, CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var list = (await LoadUnlockedAsync(ct)).ToList();
+            var removed = list.RemoveAll(e => e.Id == entryId);
+            if (removed == 0)
+                return false;
+
+            await SaveUnlockedAsync(list, ct);
+            AppLog.Default.Info("History", $"Deleted history entry {entryId}");
+            return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<int> DeleteWhereAsync(Func<RunHistoryEntry, bool> predicate, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var list = (await LoadUnlockedAsync(ct)).ToList();
+            var kept = list.Where(e => !predicate(e)).ToList();
+            var removed = list.Count - kept.Count;
+            if (removed == 0)
+                return 0;
+
+            await SaveUnlockedAsync(kept, ct);
+            AppLog.Default.Info("History", $"Deleted {removed} history entries by filter");
+            return removed;
         }
         finally
         {

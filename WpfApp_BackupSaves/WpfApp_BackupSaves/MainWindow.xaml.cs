@@ -1708,6 +1708,114 @@ public partial class MainWindow : Window
         await RestoreSelectedArchiveAsync();
     }
 
+    private void HistoryList_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var dep = e.OriginalSource as DependencyObject;
+        while (dep is not null && dep is not System.Windows.Controls.ListBoxItem)
+            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+
+        if (dep is System.Windows.Controls.ListBoxItem item)
+            item.IsSelected = true;
+    }
+
+    private void HistoryContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.ContextMenu menu)
+            return;
+
+        var entry = HistoryList.SelectedItem as RunHistoryEntry;
+        var busy = _vm.IsBusy;
+        var canRestore = !busy
+                         && entry is not null
+                         && !string.IsNullOrWhiteSpace(entry.ArchivePath)
+                         && File.Exists(entry.ArchivePath);
+
+        foreach (var item in menu.Items)
+        {
+            if (item is not System.Windows.Controls.MenuItem mi || mi.Tag is not string tag)
+                continue;
+
+            mi.IsEnabled = tag switch
+            {
+                "restore" => canRestore,
+                "delete" => !busy && entry is not null,
+                "clear" => !busy,
+                _ => mi.IsEnabled
+            };
+        }
+    }
+
+    private async void HistoryRestore_Click(object sender, RoutedEventArgs e)
+    {
+        if (HistoryList.SelectedItem is not RunHistoryEntry entry || _vm.IsBusy)
+            return;
+
+        if (string.IsNullOrWhiteSpace(entry.ArchivePath) || !File.Exists(entry.ArchivePath))
+        {
+            AppMessageBox.Show(this, LocalizationService.Text("msg.archiveMissing"),
+                LocalizationService.Text("msg.restoreTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (!TryNavigateToHistoryArchive(entry))
+        {
+            AppMessageBox.Show(this, LocalizationService.Text("msg.archiveMissing"),
+                LocalizationService.Text("msg.restoreTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        await RestoreSelectedArchiveAsync();
+    }
+
+    private async void HistoryDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (HistoryList.SelectedItem is not RunHistoryEntry entry || _vm.IsBusy)
+            return;
+
+        try
+        {
+            await _historyStore.DeleteAsync(entry.Id);
+            AppLog.Default.Info("History", $"UI deleted history entry {entry.Id}");
+            await ReloadHistoryUiAsync(_historyFullyLoaded);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("History", $"Failed to delete history entry {entry.Id}", ex);
+            AppMessageBox.Show(this, LocalizationService.Text("msg.deleteHistoryFailed", ex.Message),
+                LocalizationService.Text("msg.historyTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void HistoryClear_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.IsBusy) return;
+
+        if (AppMessageBox.Show(this,
+                LocalizationService.Text("msg.clearHistoryOrphans"),
+                LocalizationService.Text("msg.clearHistoryTitle"),
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            static bool IsOrphan(RunHistoryEntry entry) =>
+                string.IsNullOrWhiteSpace(entry.ArchivePath) || !File.Exists(entry.ArchivePath);
+
+            var removed = await _historyStore.DeleteWhereAsync(IsOrphan);
+            AppLog.Default.Info("History", $"UI cleared orphan history entries: {removed}");
+            _vm.Status = LocalizationService.Text("status.historyCleared", removed);
+            await ReloadHistoryUiAsync(_historyFullyLoaded);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("History", "Failed to clear orphan history entries", ex);
+            AppMessageBox.Show(this, LocalizationService.Text("msg.clearHistoryFailed", ex.Message),
+                LocalizationService.Text("msg.clearHistoryTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private async void ProfilesList_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (_vm.SelectedProfile is null)

@@ -717,7 +717,19 @@
          <ListBox x:Name="HistoryList"
                   ItemsSource="{Binding History}"
                   SelectionChanged="HistoryList_SelectionChanged"
-                  MouseDoubleClick="HistoryList_MouseDoubleClick">
+                  MouseDoubleClick="HistoryList_MouseDoubleClick"
+                  PreviewMouseRightButtonDown="HistoryList_PreviewMouseRightButtonDown">
+          <ListBox.ContextMenu>
+            <ContextMenu Opened="HistoryContextMenu_Opened">
+              <MenuItem Tag="restore" Header="{loc:Loc main.restore}"
+                        Click="HistoryRestore_Click"/>
+              <MenuItem Tag="delete" Header="{loc:Loc main.delete}"
+                        Click="HistoryDelete_Click"/>
+              <Separator/>
+              <MenuItem Tag="clear" Header="{loc:Loc history.clear}"
+                        Click="HistoryClear_Click"/>
+            </ContextMenu>
+          </ListBox.ContextMenu>
           <ListBox.Resources>
             <DataTemplate DataType="{x:Type models:RunHistoryEntry}">
               <StackPanel Margin="0,2">
