@@ -98,6 +98,8 @@
   "settings.closeAsk": "询问",
   "settings.closeTray": "隐藏到托盘",
   "settings.closeExit": "退出",
+  "settings.showTrayBalloon": "显示「已最小化到托盘」通知",
+  "settings.showTrayBalloonTip": "最小化或隐藏到托盘时显示气泡提示",
   "settings.checkUpdates": "检查更新",
   "settings.checkUpdatesTip": "在 GitHub 上检查新版本",
   "settings.checkUpdatesAuto": "自动检查更新",

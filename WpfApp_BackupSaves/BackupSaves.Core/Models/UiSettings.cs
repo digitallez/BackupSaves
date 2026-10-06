@@ -11,6 +11,20 @@ public sealed class UiSettings
 
     public bool MinimizeToTray { get; set; } = true;
     public bool StartMinimized { get; set; }
+
+    /// <summary>
+    /// Show balloon tip when minimizing / hiding to tray.
+    /// Null = not explicitly set: show up to <see cref="TrayBalloonSoftLimit"/> times, then auto-set to false.
+    /// Once true/false, only the user choice applies.
+    /// </summary>
+    public bool? ShowTrayBalloonTip { get; set; }
+
+    /// <summary>Times the tray balloon was shown while <see cref="ShowTrayBalloonTip"/> was unset.</summary>
+    public int TrayBalloonTipShownCount { get; set; }
+
+    /// <summary>Soft-intro shows before auto-disabling when the option is unset.</summary>
+    public const int TrayBalloonSoftLimit = 3;
+
     public AppTheme Theme { get; set; } = AppTheme.Dark;
 
     /// <summary>Active locale id from Locales JSON (@id), e.g. "ru", "cn". Null = resolve from OS @match.</summary>

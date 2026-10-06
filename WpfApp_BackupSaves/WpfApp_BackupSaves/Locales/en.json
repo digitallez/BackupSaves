@@ -98,6 +98,8 @@
   "settings.closeAsk": "Ask",
   "settings.closeTray": "Hide to tray",
   "settings.closeExit": "Quit",
+  "settings.showTrayBalloon": "Show “Minimized to tray” notification",
+  "settings.showTrayBalloonTip": "Balloon tip when minimizing or hiding to the tray",
   "settings.checkUpdates": "Check for updates",
   "settings.checkUpdatesTip": "Check GitHub for a newer version",
   "settings.checkUpdatesAuto": "Check for updates automatically",

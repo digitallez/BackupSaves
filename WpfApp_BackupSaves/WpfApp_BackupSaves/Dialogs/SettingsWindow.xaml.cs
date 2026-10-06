@@ -74,6 +74,8 @@ public partial class SettingsWindow : Window
                 ?? CloseActionCombo.Items[0];
 
             CheckUpdatesAutoBox.IsChecked = _app.Ui.CheckForUpdates;
+            // Null (unset) still shows soft-intro balloons → treat as on in the UI.
+            ShowTrayBalloonBox.IsChecked = _app.Ui.ShowTrayBalloonTip != false;
 
             RefreshInstallButton();
             LoadDevFolderPanel();
@@ -153,6 +155,16 @@ public partial class SettingsWindow : Window
             return;
 
         _app.Ui.CheckForUpdates = CheckUpdatesAutoBox.IsChecked == true;
+        await SaveAsync();
+    }
+
+    private async void ShowTrayBalloon_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppress)
+            return;
+
+        // Explicit user choice — soft-intro counter no longer applies.
+        _app.Ui.ShowTrayBalloonTip = ShowTrayBalloonBox.IsChecked == true;
         await SaveAsync();
     }
 

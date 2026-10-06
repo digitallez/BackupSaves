@@ -98,6 +98,8 @@
   "settings.closeAsk": "Запитувати",
   "settings.closeTray": "Ховати в трей",
   "settings.closeExit": "Виходити",
+  "settings.showTrayBalloon": "Показувати сповіщення «Згорнуто в трей»",
+  "settings.showTrayBalloonTip": "Спливаюче повідомлення при згортанні або хованні в трей",
   "settings.checkUpdates": "Перевірити оновлення",
   "settings.checkUpdatesTip": "Перевірити наявність нової версії на GitHub",
   "settings.checkUpdatesAuto": "Перевіряти оновлення",

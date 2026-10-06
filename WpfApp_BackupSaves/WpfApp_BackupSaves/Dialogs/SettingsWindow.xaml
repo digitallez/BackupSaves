@@ -58,7 +58,7 @@
 
       <TextBlock Text="{loc:Loc settings.closeAction}" FontWeight="SemiBold" Margin="0,0,0,6"
                  ToolTip="{loc:Loc settings.closeActionTip}"/>
-      <ComboBox x:Name="CloseActionCombo" Height="30" Margin="0,0,0,18"
+      <ComboBox x:Name="CloseActionCombo" Height="30" Margin="0,0,0,14"
                 SelectionChanged="CloseActionCombo_SelectionChanged"
                 ToolTip="{loc:Loc settings.closeActionTip}">
         <ComboBox.ItemTemplate>
@@ -71,6 +71,13 @@
           </DataTemplate>
         </ComboBox.ItemTemplate>
       </ComboBox>
+
+      <CheckBox x:Name="ShowTrayBalloonBox"
+                Content="{loc:Loc settings.showTrayBalloon}"
+                ToolTip="{loc:Loc settings.showTrayBalloonTip}"
+                Margin="0,0,0,18"
+                Checked="ShowTrayBalloon_Changed"
+                Unchecked="ShowTrayBalloon_Changed"/>
 
       <Button Height="34" Margin="0,0,0,8" Click="Logs_Click"
               ToolTip="{loc:Loc main.logsTooltip}">

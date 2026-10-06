@@ -98,6 +98,8 @@
   "settings.closeAsk": "Спрашивать",
   "settings.closeTray": "Скрывать в трей",
   "settings.closeExit": "Выходить",
+  "settings.showTrayBalloon": "Показывать уведомление «Свёрнуто в трей»",
+  "settings.showTrayBalloonTip": "Всплывающее сообщение при сворачивании или скрытии в трей",
   "settings.checkUpdates": "Проверить обновления",
   "settings.checkUpdatesTip": "Проверить наличие новой версии на GitHub",
   "settings.checkUpdatesAuto": "Проверять обновления",

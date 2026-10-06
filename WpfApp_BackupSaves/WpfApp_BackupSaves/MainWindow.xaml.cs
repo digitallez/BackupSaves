@@ -2023,7 +2023,7 @@ public partial class MainWindow : Window
         {
             SaveWindowPlacement();
             Hide();
-            _tray!.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.minimized"), WinForms.ToolTipIcon.Info);
+            TryShowTrayBalloon("tray.minimized");
             return;
         }
 
@@ -2181,7 +2181,39 @@ public partial class MainWindow : Window
         AppLog.Default.Info("App", "User hid app to tray");
         SaveWindowPlacement();
         Hide();
-        _tray?.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text("tray.running"), WinForms.ToolTipIcon.Info);
+        TryShowTrayBalloon("tray.running");
+    }
+
+    /// <summary>
+    /// Balloon tip when going to tray. Respects <see cref="UiSettings.ShowTrayBalloonTip"/>;
+    /// when unset, shows up to <see cref="UiSettings.TrayBalloonSoftLimit"/> times then auto-disables.
+    /// </summary>
+    private void TryShowTrayBalloon(string messageKey)
+    {
+        if (_tray is null)
+            return;
+
+        var preference = _app.Ui.ShowTrayBalloonTip;
+        if (preference == false)
+            return;
+
+        _tray.ShowBalloonTip(1500, "BackupSaves", LocalizationService.Text(messageKey), WinForms.ToolTipIcon.Info);
+
+        if (preference == true)
+            return;
+
+        _app.Ui.TrayBalloonTipShownCount++;
+        if (_app.Ui.TrayBalloonTipShownCount >= UiSettings.TrayBalloonSoftLimit)
+            _app.Ui.ShowTrayBalloonTip = false;
+
+        try
+        {
+            _settings.Save(_app);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Default.Error("Settings", "Failed to save tray balloon preference", ex);
+        }
     }
 
     private void CleanupOnExit()
