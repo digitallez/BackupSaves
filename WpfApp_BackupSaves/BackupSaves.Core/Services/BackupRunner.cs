@@ -49,14 +49,20 @@ public sealed class BackupRunner : IBackupRunner
         }
 
         _log.Info("Backup",
-            $"Start: profile=\"{profile.Name}\" id={profile.Id:N} format={profile.Format} trigger={trigger} sources={profile.Sources.Count}");
+            $"Start: profile=\"{profile.Name}\" id={profile.Id:N} format={profile.Format} trigger={trigger} sources={profile.Sources.Count} enabled={profile.Enabled}");
 
         var started = DateTimeOffset.UtcNow;
         BackupResult result;
 
         try
         {
-            if (ShouldSkipForProcessWatch(profile, out var skipMessage, out var farewell))
+            if (!profile.Enabled && trigger != RunTrigger.Manual)
+            {
+                var disabledMsg = LocalizationService.Text("core.profileDisabled");
+                _log.Info("Backup", $"Skip disabled profile «{profile.Name}» (trigger={trigger})");
+                result = BackupResult.SkippedReason(disabledMsg);
+            }
+            else if (ShouldSkipForProcessWatch(profile, out var skipMessage, out var farewell))
             {
                 _log.Info("Backup",
                     $"Skip by process watch «{profile.Name}»: {skipMessage}");
@@ -70,7 +76,9 @@ public sealed class BackupRunner : IBackupRunner
                 result = await _backup.BackupAsync(profile, ct, progress);
             }
 
-            if (profile.WatchProcessEnabled && ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
+            if (profile.Enabled
+                && profile.WatchProcessEnabled
+                && ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
             {
                 profile.WatchProcessWasRunning =
                     ProcessWatchService.IsAnyMatchingProcessRunning(profile.WatchProcessPattern);

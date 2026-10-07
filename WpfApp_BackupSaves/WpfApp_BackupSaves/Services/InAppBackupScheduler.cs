@@ -152,7 +152,8 @@ public sealed class InAppBackupScheduler : IDisposable
 
         foreach (var profile in app.Profiles)
         {
-            if (!profile.WatchProcessEnabled
+            if (!profile.Enabled
+                || !profile.WatchProcessEnabled
                 || !ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
                 continue;
 
@@ -185,7 +186,8 @@ public sealed class InAppBackupScheduler : IDisposable
         var changed = false;
         foreach (var profile in app.Profiles)
         {
-            if (!profile.WatchProcessEnabled
+            if (!profile.Enabled
+                || !profile.WatchProcessEnabled
                 || !ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
                 continue;
 
@@ -204,7 +206,8 @@ public sealed class InAppBackupScheduler : IDisposable
 
     private static bool IsFarewellDue(BackupProfile profile, IReadOnlyDictionary<string, bool> runningMap)
     {
-        if (!profile.WatchProcessEnabled
+        if (!profile.Enabled
+            || !profile.WatchProcessEnabled
             || !ProcessWatchService.IsMatchPatternConfigured(profile.WatchProcessPattern))
             return false;
 
@@ -216,6 +219,9 @@ public sealed class InAppBackupScheduler : IDisposable
 
     private static bool IsDue(BackupProfile profile, IReadOnlyDictionary<string, bool> runningMap)
     {
+        if (!profile.Enabled)
+            return false;
+
         var s = profile.Schedule;
         if (s.Enabled || !s.InAppEnabled)
             return false;
@@ -246,6 +252,9 @@ public sealed class InAppBackupScheduler : IDisposable
     /// </summary>
     public static bool IsInAppIntervalElapsed(BackupProfile profile, DateTimeOffset utcNow)
     {
+        if (!profile.Enabled)
+            return false;
+
         var s = profile.Schedule;
         if (s.Enabled || !s.InAppEnabled)
             return false;

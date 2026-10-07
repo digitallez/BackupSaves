@@ -12,6 +12,11 @@ public sealed class BackupProfile
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = "";
     public string Slug { get; set; } = "";
+    /// <summary>
+    /// When false, automatic backups (Task Scheduler, in-app interval, process-watch farewell) are skipped.
+    /// Manual backup from the GUI still runs.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
     public string BackupRoot { get; set; } = "";
     /// <summary>Default for real use is SevenZip; Zip is a fallback.</summary>
     public ArchiveFormat Format { get; set; } = ArchiveFormat.SevenZip;

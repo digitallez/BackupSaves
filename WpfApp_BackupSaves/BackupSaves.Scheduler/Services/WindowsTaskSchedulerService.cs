@@ -28,7 +28,7 @@ public sealed class WindowsTaskSchedulerService : IWindowsTaskSchedulerService
 
     public DateTimeOffset? GetNextRunTime(BackupProfile profile)
     {
-        if (!profile.Schedule.Enabled)
+        if (!profile.Enabled || !profile.Schedule.Enabled)
             return null;
 
         try
@@ -65,7 +65,7 @@ public sealed class WindowsTaskSchedulerService : IWindowsTaskSchedulerService
 
     public void Upsert(BackupProfile profile, string exePath)
     {
-        if (!profile.Schedule.Enabled)
+        if (!profile.Enabled || !profile.Schedule.Enabled)
         {
             Delete(profile);
             return;

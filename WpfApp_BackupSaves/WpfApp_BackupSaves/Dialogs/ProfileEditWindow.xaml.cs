@@ -24,6 +24,7 @@ public partial class ProfileEditWindow : Window
             ? new BackupProfile()
             : Clone(existing);
 
+        ProfileEnabled.IsChecked = Profile.Enabled;
         NameBox.Text = Profile.Name;
         RootBox.Text = Profile.BackupRoot;
         RetentionBox.Text = Profile.RetentionCount.ToString();
@@ -71,6 +72,7 @@ public partial class ProfileEditWindow : Window
         Id = p.Id,
         Name = p.Name,
         Slug = p.Slug,
+        Enabled = p.Enabled,
         BackupRoot = p.BackupRoot,
         Format = p.Format,
         RetentionCount = p.RetentionCount,
@@ -377,6 +379,7 @@ public partial class ProfileEditWindow : Window
             return;
         }
 
+        Profile.Enabled = ProfileEnabled.IsChecked == true;
         Profile.Name = NameBox.Text.Trim();
         Profile.Slug = PathHelper.ToSlug(Profile.Name);
         Profile.BackupRoot = RootBox.Text.Trim();

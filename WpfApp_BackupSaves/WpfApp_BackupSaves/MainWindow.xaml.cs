@@ -841,7 +841,7 @@ public partial class MainWindow : Window
         foreach (var profile in _app.Profiles)
         {
             DateTimeOffset? next = null;
-            if (profile.Schedule.Enabled)
+            if (profile.Enabled && profile.Schedule.Enabled)
             {
                 try { next = _scheduler.GetNextRunTime(profile); }
                 catch { /* ignore */ }
@@ -1238,7 +1238,7 @@ public partial class MainWindow : Window
             {
                 _scheduler.Upsert(p, exe);
                 AppLog.Default.Info("Scheduler",
-                    $"Upsert task for «{p.Name}» enabled={p.Schedule.Enabled} kind={p.Schedule.Kind}");
+                    $"Upsert task for «{p.Name}» profileEnabled={p.Enabled} schedule={p.Schedule.Enabled} kind={p.Schedule.Kind}");
             }
             catch (Exception ex)
             {
@@ -1348,7 +1348,7 @@ public partial class MainWindow : Window
         if (idx < 0) return;
         _app.Profiles[idx] = dlg.Profile;
         AppLog.Default.Info("Settings",
-            $"Profile updated: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} schedule={dlg.Profile.Schedule.Enabled}/{dlg.Profile.Schedule.Kind} inApp={dlg.Profile.Schedule.InAppEnabled}");
+            $"Profile updated: «{dlg.Profile.Name}» id={dlg.Profile.Id:N} enabled={dlg.Profile.Enabled} format={dlg.Profile.Format} sources={dlg.Profile.Sources.Count} schedule={dlg.Profile.Schedule.Enabled}/{dlg.Profile.Schedule.Kind} inApp={dlg.Profile.Schedule.InAppEnabled}");
         await PersistAndSyncSchedulerAsync(dlg.Profile);
         EnsureInAppScheduler();
         _inAppScheduler!.Start();

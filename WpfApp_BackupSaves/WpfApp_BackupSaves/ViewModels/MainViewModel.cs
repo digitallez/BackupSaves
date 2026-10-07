@@ -334,6 +334,9 @@ public sealed class ProfileListItem : INotifyPropertyChanged
         bool watchOn,
         bool running)
     {
+        if (!profile.Enabled)
+            return LocalizationService.Text("main.nextBackupDisabled");
+
         var s = profile.Schedule;
         var hasSchedule = s.Enabled || s.InAppEnabled;
         if (!hasSchedule)
