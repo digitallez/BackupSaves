@@ -12,6 +12,116 @@
         Foreground="{DynamicResource PrimaryTextBrush}"
         Closing="Window_Closing"
         StateChanged="Window_StateChanged">
+  <Window.Resources>
+    <Style x:Key="SplitPartButtonStyle" TargetType="Button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd"
+                    Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}"
+                    CornerRadius="2,0,0,2">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ButtonHoverBrush}"/>
+              </Trigger>
+              <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                  <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True"/>
+                  <Condition Binding="{Binding BackupUnconditional}" Value="True"/>
+                </MultiDataTrigger.Conditions>
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BackupForceHoverBrush}"/>
+              </MultiDataTrigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SplitDropButtonStyle" TargetType="ToggleButton">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="Bd"
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="0,2,2,0">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ButtonHoverBrush}"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ButtonHoverBrush}"/>
+              </Trigger>
+              <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                  <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True"/>
+                  <Condition Binding="{Binding BackupUnconditional}" Value="True"/>
+                </MultiDataTrigger.Conditions>
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BackupForceHoverBrush}"/>
+              </MultiDataTrigger>
+              <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                  <Condition Binding="{Binding IsChecked, RelativeSource={RelativeSource Self}}" Value="True"/>
+                  <Condition Binding="{Binding BackupUnconditional}" Value="True"/>
+                </MultiDataTrigger.Conditions>
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BackupForceHoverBrush}"/>
+              </MultiDataTrigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="MenuLikeButtonStyle" TargetType="Button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd"
+                    Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectionBrush}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
   <DockPanel>
     <controls:CustomTitleBar DockPanel.Dock="Top"/>
 
@@ -204,15 +314,96 @@
                      VerticalAlignment="Center" Margin="0,0,10,0"
                      IsHitTestVisible="False"/>
           <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
-            <Button Height="24" Padding="8,0" Margin="0,0,6,0" MinWidth="0" MinHeight="0"
-                    Click="BackupNow_Click" IsEnabled="{Binding HasProfile}" FontWeight="SemiBold"
-                    ToolTip="{loc:Loc main.backupNow}">
-              <StackPanel Orientation="Horizontal">
-                <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets" FontSize="13"
-                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <TextBlock Text="{loc:Loc main.backupNow}" VerticalAlignment="Center"/>
-              </StackPanel>
-            </Button>
+            <Border x:Name="BackupSplitHost"
+                    Height="24"
+                    Margin="0,0,6,0"
+                    VerticalAlignment="Center"
+                    CornerRadius="3"
+                    BorderThickness="1"
+                    SnapsToDevicePixels="True">
+              <Border.Style>
+                <Style TargetType="Border">
+                  <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+                  <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushKey}"/>
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding BackupUnconditional}" Value="True">
+                      <Setter Property="Background" Value="{DynamicResource BackupForceBackgroundBrush}"/>
+                      <Setter Property="BorderBrush" Value="{DynamicResource BackupForceBorderBrush}"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding HasProfile}" Value="False">
+                      <Setter Property="Opacity" Value="0.45"/>
+                      <Setter Property="IsEnabled" Value="False"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="1"/>
+                  <ColumnDefinition Width="22"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="BackupNowButton"
+                        Grid.Column="0"
+                        MinWidth="0" MinHeight="0"
+                        Padding="8,0"
+                        FontWeight="SemiBold"
+                        Style="{StaticResource SplitPartButtonStyle}"
+                        Click="BackupNow_Click">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="{loc:Loc main.backupNow}" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
+                <Border Grid.Column="1" Background="{Binding BorderBrush, ElementName=BackupSplitHost}"/>
+                <ToggleButton x:Name="BackupModeButton"
+                              Grid.Column="2"
+                              MinWidth="0" MinHeight="0"
+                              Style="{StaticResource SplitDropButtonStyle}"
+                              IsChecked="{Binding IsOpen, ElementName=BackupModePopup, Mode=TwoWay}"
+                              ToolTip="{loc:Loc main.backupModeTip}">
+                  <Path Data="M 0 0 L 4 4 L 8 0 Z"
+                        Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                        Width="8" Height="4"
+                        Stretch="Fill"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"/>
+                </ToggleButton>
+              </Grid>
+            </Border>
+            <Popup x:Name="BackupModePopup"
+                   PlacementTarget="{Binding ElementName=BackupSplitHost}"
+                   Placement="Bottom"
+                   VerticalOffset="2"
+                   StaysOpen="False"
+                   AllowsTransparency="True"
+                   PopupAnimation="Slide">
+              <Border MinWidth="{Binding ActualWidth, ElementName=BackupSplitHost}"
+                      Background="{DynamicResource PanelBackgroundBrush}"
+                      BorderBrush="{DynamicResource BorderBrushKey}"
+                      BorderThickness="1"
+                      Padding="2">
+                <StackPanel>
+                  <Button Style="{StaticResource MenuLikeButtonStyle}"
+                          Click="BackupModeRules_Click"
+                          ToolTip="{loc:Loc main.backupModeRulesTip}">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock x:Name="BackupModeRulesMark" Text="✓" Width="16" FontWeight="SemiBold"/>
+                      <TextBlock Text="{loc:Loc main.backupModeRules}"/>
+                    </StackPanel>
+                  </Button>
+                  <Button Style="{StaticResource MenuLikeButtonStyle}"
+                          Click="BackupModeForce_Click"
+                          ToolTip="{loc:Loc main.backupModeForceTip}">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock x:Name="BackupModeForceMark" Text="" Width="16" FontWeight="SemiBold"/>
+                      <TextBlock Text="{loc:Loc main.backupModeForce}"/>
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+              </Border>
+            </Popup>
             <Button Height="24" Padding="8,0" MinWidth="0" MinHeight="0"
                     Click="Restore_Click" IsEnabled="{Binding HasArchive}"
                     ToolTip="{loc:Loc main.restore}">

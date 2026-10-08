@@ -46,12 +46,25 @@ public sealed class RetentionService : IRetentionService
     }
 }
 
+/// <summary>
+/// Manual-run options. <see cref="Force"/> skips "unchanged" and process-watch skips.
+/// When the destination archive already exists, <see cref="ConfirmOverwrite"/> decides.
+/// </summary>
+public sealed class BackupOptions
+{
+    public bool Force { get; init; }
+
+    /// <summary>Return true to replace an existing archive file. Called before compression.</summary>
+    public Func<string, bool>? ConfirmOverwrite { get; init; }
+}
+
 public interface IBackupService
 {
     Task<BackupResult> BackupAsync(
         BackupProfile profile,
         CancellationToken ct = default,
-        IProgress<BackupProgress>? progress = null);
+        IProgress<BackupProgress>? progress = null,
+        BackupOptions? options = null);
 }
 
 public sealed class BackupService : IBackupService
@@ -71,7 +84,8 @@ public sealed class BackupService : IBackupService
     public async Task<BackupResult> BackupAsync(
         BackupProfile profile,
         CancellationToken ct = default,
-        IProgress<BackupProgress>? progress = null)
+        IProgress<BackupProgress>? progress = null,
+        BackupOptions? options = null)
     {
         var tracker = new BackupProgressTracker(progress);
         try
@@ -97,8 +111,36 @@ public sealed class BackupService : IBackupService
             var fileName = PathHelper.BuildArchiveFileName(profile, created);
             var finalPath = Path.Combine(archiveDir, fileName);
             var tempPath = finalPath + ".tmp";
+            var overwriteExisting = false;
 
-            AppLog.Default.Info("Backup", $"Archiving → temp=\"{tempPath}\" format={profile.Format}");
+            if (options?.Force == true && File.Exists(finalPath))
+            {
+                var confirmed = false;
+                if (options.ConfirmOverwrite is { } confirm)
+                {
+                    try
+                    {
+                        confirmed = confirm(finalPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.Default.Error("Backup", "Overwrite confirmation failed", ex);
+                        return Fail(ex.Message);
+                    }
+                }
+
+                if (!confirmed)
+                {
+                    AppLog.Default.Info("Backup", $"Overwrite declined: \"{finalPath}\"");
+                    return BackupResult.SkippedReason(LocalizationService.Text("core.overwriteDeclined"));
+                }
+
+                overwriteExisting = true;
+                AppLog.Default.Info("Backup", $"Overwrite confirmed: \"{finalPath}\"");
+            }
+
+            AppLog.Default.Info("Backup",
+                $"Archiving → temp=\"{tempPath}\" format={profile.Format} force={options?.Force == true} overwrite={overwriteExisting}");
 
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
@@ -208,15 +250,23 @@ public sealed class BackupService : IBackupService
                 }
 
                 var previous = ChecksumService.TryLoad(archiveDir);
-                if (previous is not null && ChecksumService.AreEqual(checksums, previous.Files))
+                var unchanged = previous is not null && ChecksumService.AreEqual(checksums, previous.Files);
+                if (unchanged && options?.Force == true)
+                {
+                    AppLog.Default.Info("Backup",
+                        $"Checksum: no changes ({checksums.Count} file(s)) — force archive");
+                }
+                else if (unchanged)
                 {
                     AppLog.Default.Info("Backup",
                         $"Checksum: no changes ({checksums.Count} file(s)) — skip archive");
                     tracker.Report(BackupProgressPhase.Finalizing, 1);
                     return BackupResult.SkippedUnchanged(checksums.Count);
                 }
-
-                AppLog.Default.Info("Backup", "Checksum: changes detected — creating archive");
+                else
+                {
+                    AppLog.Default.Info("Backup", "Checksum: changes detected — creating archive");
+                }
             }
 
             var manifest = new Manifest
@@ -262,7 +312,16 @@ public sealed class BackupService : IBackupService
 
             tracker.Report(BackupProgressPhase.Finalizing, CompressEnd);
 
-            File.Move(tempPath, finalPath, overwrite: false);
+            try
+            {
+                File.Move(tempPath, finalPath, overwrite: overwriteExisting);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                TryDelete(tempPath);
+                AppLog.Default.Error("Backup", "Failed to publish archive", ex);
+                return BackupResult.Fail(ex.Message);
+            }
             var deleted = _retention.Apply(archiveDir, profile.Format, profile.RetentionCount);
 
             if (checksumEnabled)

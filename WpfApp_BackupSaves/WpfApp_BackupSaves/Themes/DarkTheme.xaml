@@ -11,6 +11,9 @@
   <SolidColorBrush x:Key="ControlForegroundBrush" Color="#E8E8E8"/>
   <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#3C3C41"/>
   <SolidColorBrush x:Key="ButtonHoverBrush" Color="#4A4A50"/>
+  <SolidColorBrush x:Key="BackupForceBackgroundBrush" Color="#5C3A3D"/>
+  <SolidColorBrush x:Key="BackupForceHoverBrush" Color="#6E474B"/>
+  <SolidColorBrush x:Key="BackupForceBorderBrush" Color="#8A5E63"/>
   <SolidColorBrush x:Key="SelectionBrush" Color="#264F78"/>
   <SolidColorBrush x:Key="ProcessRunningBrush" Color="#4CAF50"/>
   <SolidColorBrush x:Key="ProcessRunningBackgroundBrush" Color="#1B3D24"/>

@@ -9,7 +9,8 @@ public interface IBackupRunner
         Guid profileId,
         RunTrigger trigger,
         CancellationToken ct = default,
-        IProgress<BackupProgress>? progress = null);
+        IProgress<BackupProgress>? progress = null,
+        BackupOptions? options = null);
 }
 
 /// <summary>Loads settings, runs backup, appends history. Used by UI and headless CLI.</summary>
@@ -36,7 +37,8 @@ public sealed class BackupRunner : IBackupRunner
         Guid profileId,
         RunTrigger trigger,
         CancellationToken ct = default,
-        IProgress<BackupProgress>? progress = null)
+        IProgress<BackupProgress>? progress = null,
+        BackupOptions? options = null)
     {
         var app = await _settings.LoadAsync(ct);
         EnsureLanguage(app);
@@ -48,21 +50,23 @@ public sealed class BackupRunner : IBackupRunner
             return BackupResult.Fail(LocalizationService.Text("core.profileNotFound", profileId));
         }
 
+        var force = options?.Force == true;
         _log.Info("Backup",
-            $"Start: profile=\"{profile.Name}\" id={profile.Id:N} format={profile.Format} trigger={trigger} sources={profile.Sources.Count} enabled={profile.Enabled}");
+            $"Start: profile=\"{profile.Name}\" id={profile.Id:N} format={profile.Format} trigger={trigger} force={force} sources={profile.Sources.Count} enabled={profile.Enabled}");
 
         var started = DateTimeOffset.UtcNow;
         BackupResult result;
 
         try
         {
+            var skipWatch = ShouldSkipForProcessWatch(profile, out var skipMessage, out var farewell);
             if (!profile.Enabled && trigger != RunTrigger.Manual)
             {
                 var disabledMsg = LocalizationService.Text("core.profileDisabled");
                 _log.Info("Backup", $"Skip disabled profile «{profile.Name}» (trigger={trigger})");
                 result = BackupResult.SkippedReason(disabledMsg);
             }
-            else if (ShouldSkipForProcessWatch(profile, out var skipMessage, out var farewell))
+            else if (skipWatch && !force)
             {
                 _log.Info("Backup",
                     $"Skip by process watch «{profile.Name}»: {skipMessage}");
@@ -73,7 +77,7 @@ public sealed class BackupRunner : IBackupRunner
                 if (farewell)
                     _log.Info("Backup", $"Farewell backup «{profile.Name}»: process just exited");
 
-                result = await _backup.BackupAsync(profile, ct, progress);
+                result = await _backup.BackupAsync(profile, ct, progress, options);
             }
 
             if (profile.Enabled

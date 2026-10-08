@@ -643,6 +643,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool HasProfile => SelectedProfile is not null;
+
+    private bool _backupUnconditional;
+    public bool BackupUnconditional
+    {
+        get => _backupUnconditional;
+        set => Set(ref _backupUnconditional, value);
+    }
     public bool HasArchive => SelectedArchive is not null;
     public bool CanInteract => !IsBusy;
 

@@ -57,6 +57,7 @@ public partial class MainWindow : Window
         _runner = new BackupRunner(_settings, _historyStore);
 
         InitializeComponent();
+        UpdateBackupModeAppearance();
         CustomWindowChrome.Apply(this);
         Title = $"BackupSaves {AppVersion.Current}";
         DataContext = _vm;
@@ -73,6 +74,7 @@ public partial class MainWindow : Window
             {
                 RebuildTrayMenu();
                 UpdateThemeToggleCaption();
+                UpdateBackupModeAppearance();
                 RefreshProfilesLive();
                 RefreshHistoryLoadMoreCaption();
                 UpdateHistoryFilterDisplay();
@@ -1385,7 +1387,18 @@ public partial class MainWindow : Window
         var progress = CreateBackupProgress();
         try
         {
-            var result = await _runner.RunProfileAsync(_vm.SelectedProfile.Id, RunTrigger.Manual, progress: progress);
+            BackupOptions? options = null;
+            if (_vm.BackupUnconditional)
+            {
+                options = new BackupOptions
+                {
+                    Force = true,
+                    ConfirmOverwrite = ConfirmArchiveOverwrite
+                };
+            }
+
+            var result = await _runner.RunProfileAsync(
+                _vm.SelectedProfile.Id, RunTrigger.Manual, progress: progress, options: options);
             _app = await _settings.LoadAsync();
             await ReloadHistoryUiAsync();
             RefreshArchives();
@@ -1404,6 +1417,42 @@ public partial class MainWindow : Window
             _vm.EndBackupProgress();
             _vm.IsBusy = false;
         }
+    }
+
+    private void BackupModeRules_Click(object sender, RoutedEventArgs e)
+    {
+        _vm.BackupUnconditional = false;
+        BackupModePopup.IsOpen = false;
+        UpdateBackupModeAppearance();
+    }
+
+    private void BackupModeForce_Click(object sender, RoutedEventArgs e)
+    {
+        _vm.BackupUnconditional = true;
+        BackupModePopup.IsOpen = false;
+        UpdateBackupModeAppearance();
+    }
+
+    private void UpdateBackupModeAppearance()
+    {
+        BackupNowButton.ToolTip = LocalizationService.Text(
+            _vm.BackupUnconditional ? "main.backupModeForceTip" : "main.backupModeRulesTip");
+        BackupModeRulesMark.Text = _vm.BackupUnconditional ? "" : "\u2713";
+        BackupModeForceMark.Text = _vm.BackupUnconditional ? "\u2713" : "";
+    }
+
+    private bool ConfirmArchiveOverwrite(string path)
+    {
+        var answer = MessageBoxResult.No;
+        Dispatcher.Invoke(() =>
+        {
+            answer = AppMessageBox.Show(this,
+                LocalizationService.Text("msg.overwriteArchive", path),
+                LocalizationService.Text("msg.overwriteArchiveTitle"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+        });
+        return answer == MessageBoxResult.Yes;
     }
 
     private Progress<BackupProgress> CreateBackupProgress() =>
