@@ -168,8 +168,58 @@
                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Button>
           </StackPanel>
-          <TextBlock Text="{loc:Loc main.profiles}" FontSize="16" FontWeight="SemiBold"
-                     VerticalAlignment="Center"/>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Loc main.profiles}" FontSize="16" FontWeight="SemiBold"
+                       VerticalAlignment="Center"/>
+            <Border x:Name="ProfilesFilterHost"
+                    Margin="8,3,0,0" Padding="2,0"
+                    VerticalAlignment="Center" Cursor="Hand"
+                    Background="Transparent"
+                    ToolTip="{loc:Loc main.profilesFilterTip}"
+                    MouseLeftButtonDown="ProfilesFilter_MouseLeftButtonDown"
+                    MouseMove="ProfilesFilter_MouseMove"
+                    MouseLeftButtonUp="ProfilesFilter_MouseLeftButtonUp"
+                    LostMouseCapture="ProfilesFilter_LostMouseCapture">
+              <Grid>
+                <TextBlock Text="{loc:Loc main.profilesFilterAll}"
+                           FontSize="12" FontWeight="Normal">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Visibility" Value="Collapsed"/>
+                      <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding ShowAllProfiles}" Value="True">
+                          <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsMouseOver, ElementName=ProfilesFilterHost}" Value="True">
+                          <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                          <Setter Property="TextDecorations" Value="Underline"/>
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{loc:Loc main.profilesFilterActive}"
+                           FontSize="12" FontWeight="Normal">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Visibility" Value="Collapsed"/>
+                      <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding ShowOnlyActiveProfiles}" Value="True">
+                          <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsMouseOver, ElementName=ProfilesFilterHost}" Value="True">
+                          <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                          <Setter Property="TextDecorations" Value="Underline"/>
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+              </Grid>
+            </Border>
+          </StackPanel>
         </DockPanel>
          <ListBox x:Name="ProfilesList"
                   ItemsSource="{Binding Profiles}"
@@ -178,12 +228,17 @@
                   MouseDoubleClick="ProfilesList_MouseDoubleClick"
                   PreviewMouseRightButtonDown="ProfilesList_PreviewMouseRightButtonDown">
           <ListBox.ContextMenu>
-            <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                         Opened="ProfilesContextMenu_Opened">
               <MenuItem Header="{loc:Loc main.add}" Click="AddProfile_Click"
                         IsEnabled="{Binding CanInteract}"/>
               <MenuItem Header="{loc:Loc main.edit}" Click="EditProfile_Click"
                         IsEnabled="{Binding HasProfile}"/>
               <MenuItem Header="{loc:Loc main.delete}" Click="DeleteProfile_Click"
+                        IsEnabled="{Binding HasProfile}"/>
+              <MenuItem Header="{loc:Loc main.toggleProfileEnabled}"
+                        Tag="toggleEnabled"
+                        Click="ToggleProfileEnabled_Click"
                         IsEnabled="{Binding HasProfile}"/>
               <Separator/>
               <MenuItem Header="{loc:Loc main.backupNow}" Click="BackupNow_Click"

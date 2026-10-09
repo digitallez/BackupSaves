@@ -335,6 +335,7 @@ public partial class MainWindow : Window
         _vm.SelectLanguageSilent(LocalizationService.Instance.Language);
         UpdateThemeToggleCaption();
         RebuildTrayMenu();
+        _vm.ShowOnlyActiveProfiles = _app.Ui.ShowOnlyActiveProfiles;
         ReloadProfilesUi();
         await ReloadHistoryUiAsync();
         _watcher.Watch(_app.Profiles);
@@ -681,13 +682,133 @@ public partial class MainWindow : Window
     {
         var selectedId = _vm.SelectedProfile?.Id;
         _vm.Profiles.Clear();
-        foreach (var p in _app.Profiles.OrderBy(p => p.Name))
+        var profiles = _app.Profiles.OrderBy(p => p.Name).AsEnumerable();
+        if (_vm.ShowOnlyActiveProfiles)
+            profiles = profiles.Where(p => p.Enabled);
+        foreach (var p in profiles)
             _vm.Profiles.Add(new ProfileListItem(p));
         _vm.SelectedProfile = selectedId is Guid id
             ? _vm.Profiles.FirstOrDefault(p => p.Id == id)
             : _vm.Profiles.FirstOrDefault();
         InvalidateTaskNextRunCache();
         RefreshProfilesLive();
+    }
+
+    private System.Windows.Point? _profilesFilterPressPoint;
+    private bool _profilesFilterDragging;
+
+    private void ProfilesFilter_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Left)
+            return;
+
+        _profilesFilterPressPoint = e.GetPosition(this);
+        _profilesFilterDragging = false;
+        ProfilesFilterHost.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void ProfilesFilter_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_profilesFilterPressPoint is null
+            || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed
+            || _profilesFilterDragging)
+            return;
+
+        var pos = e.GetPosition(this);
+        var dx = Math.Abs(pos.X - _profilesFilterPressPoint.Value.X);
+        var dy = Math.Abs(pos.Y - _profilesFilterPressPoint.Value.Y);
+        if (dx < SystemParameters.MinimumHorizontalDragDistance
+            && dy < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        _profilesFilterDragging = true;
+        _profilesFilterPressPoint = null;
+        if (ProfilesFilterHost.IsMouseCaptured)
+            ProfilesFilterHost.ReleaseMouseCapture();
+
+        try
+        {
+            if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
+                DragMove();
+        }
+        finally
+        {
+            _profilesFilterDragging = false;
+        }
+    }
+
+    private void ProfilesFilter_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Left)
+            return;
+
+        var click = _profilesFilterPressPoint is not null && !_profilesFilterDragging;
+        ClearProfilesFilterPress();
+        e.Handled = true;
+
+        if (!click)
+            return;
+
+        _vm.ShowOnlyActiveProfiles = !_vm.ShowOnlyActiveProfiles;
+        _app.Ui.ShowOnlyActiveProfiles = _vm.ShowOnlyActiveProfiles;
+        ReloadProfilesUi();
+        _ = _settings.SaveAsync(_app);
+    }
+
+    private void ProfilesFilter_LostMouseCapture(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_profilesFilterDragging)
+            ClearProfilesFilterPress();
+    }
+
+    private void ClearProfilesFilterPress()
+    {
+        _profilesFilterPressPoint = null;
+        _profilesFilterDragging = false;
+        if (ProfilesFilterHost.IsMouseCaptured)
+            ProfilesFilterHost.ReleaseMouseCapture();
+    }
+
+    private void ProfilesContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.ContextMenu menu)
+            return;
+
+        var header = _vm.SelectedProfile?.Profile.Enabled == true
+            ? LocalizationService.Text("main.deactivateProfile")
+            : LocalizationService.Text("main.activateProfile");
+
+        foreach (var item in menu.Items)
+        {
+            if (item is System.Windows.Controls.MenuItem { Tag: "toggleEnabled" } mi)
+                mi.Header = header;
+        }
+    }
+
+    private async void ToggleProfileEnabled_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedProfile is null)
+            return;
+
+        var profile = _vm.SelectedProfile.Profile;
+        var idx = _app.Profiles.FindIndex(p => p.Id == profile.Id);
+        if (idx < 0)
+            return;
+
+        var target = _app.Profiles[idx];
+        target.Enabled = !target.Enabled;
+        AppLog.Default.Info("Settings",
+            $"Profile activity toggled: «{target.Name}» id={target.Id:N} enabled={target.Enabled}");
+        await PersistAndSyncSchedulerAsync(target);
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
+        ReloadProfilesUi();
+        _vm.SelectedProfile = _vm.Profiles.FirstOrDefault(p => p.Id == target.Id)
+                              ?? _vm.Profiles.FirstOrDefault();
+        _vm.Status = target.Enabled
+            ? LocalizationService.Text("status.profileActivated", target.Name)
+            : LocalizationService.Text("status.profileDeactivated", target.Name);
     }
 
     private void StartProfilesLiveTimer()

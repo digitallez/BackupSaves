@@ -81,4 +81,9 @@ public sealed class UiSettings
 
     /// <summary>True after the first-run install/use-here prompt was answered.</summary>
     public bool InstallPromptCompleted { get; set; }
+
+    /// <summary>
+    /// When true, the profiles list shows only Enabled profiles; otherwise all profiles.
+    /// </summary>
+    public bool ShowOnlyActiveProfiles { get; set; }
 }

@@ -553,6 +553,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private bool _showOnlyActiveProfiles;
+    /// <summary>When true, list shows only Enabled profiles.</summary>
+    public bool ShowOnlyActiveProfiles
+    {
+        get => _showOnlyActiveProfiles;
+        set
+        {
+            if (Set(ref _showOnlyActiveProfiles, value))
+                OnPropertyChanged(nameof(ShowAllProfiles));
+        }
+    }
+
+    public bool ShowAllProfiles => !_showOnlyActiveProfiles;
+
     private ArchiveListItem? _selectedArchive;
     public ArchiveListItem? SelectedArchive
     {
