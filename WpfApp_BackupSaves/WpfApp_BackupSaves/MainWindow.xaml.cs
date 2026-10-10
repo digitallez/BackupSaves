@@ -2050,17 +2050,30 @@ public partial class MainWindow : Window
         if (profileItem is not null && !ReferenceEquals(_vm.SelectedProfile, profileItem))
             _vm.SelectedProfile = profileItem;
 
-        if (string.IsNullOrWhiteSpace(entry.ArchivePath))
+        var archivePath = entry.ArchivePath;
+        if (string.IsNullOrWhiteSpace(archivePath))
         {
-            _vm.SelectedArchive = null;
-            return false;
+            // SKIP has no archive — select the last successful one for this profile.
+            if (!entry.Skipped)
+            {
+                _vm.SelectedArchive = null;
+                return false;
+            }
+
+            archivePath = ResolveLastSuccessfulArchivePath(entry);
+            if (string.IsNullOrWhiteSpace(archivePath))
+            {
+                _vm.SelectedArchive = null;
+                return false;
+            }
         }
 
-        var match = FindArchiveByPath(entry.ArchivePath);
+        var match = FindArchiveByPath(archivePath);
         if (match is null)
         {
             RefreshArchives();
-            match = FindArchiveByPath(entry.ArchivePath);
+            match = FindArchiveByPath(archivePath)
+                    ?? (entry.Skipped ? FirstVisibleArchive() : null);
         }
 
         // Only select when the archive is actually visible in the filtered archives list.
@@ -2076,6 +2089,29 @@ public partial class MainWindow : Window
 
         ArchivesList.ScrollIntoView(match);
         return true;
+    }
+
+    /// <summary>
+    /// For SKIP history rows: prefer the newest successful run for the same profile
+    /// at or before this entry; else the newest visible archive on disk.
+    /// </summary>
+    private string? ResolveLastSuccessfulArchivePath(RunHistoryEntry skipEntry)
+    {
+        var fromHistory = _vm.History
+            .OfType<RunHistoryEntry>()
+            .Where(h => h.ProfileId == skipEntry.ProfileId
+                        && h.Success
+                        && !string.IsNullOrWhiteSpace(h.ArchivePath)
+                        && h.StartedUtc <= skipEntry.StartedUtc)
+            .OrderByDescending(h => h.StartedUtc)
+            .Select(h => h.ArchivePath!)
+            .FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(fromHistory))
+            return fromHistory;
+
+        return FirstVisibleArchive()?.Path
+               ?? _vm.Archives.FirstOrDefault(a => _vm.MatchesArchiveFilter(a))?.Path;
     }
 
     private ArchiveListItem? FindArchiveByPath(string archivePath)
