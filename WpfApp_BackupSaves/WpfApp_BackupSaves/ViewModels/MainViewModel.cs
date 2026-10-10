@@ -203,6 +203,7 @@ public sealed class ProfileListItem : INotifyPropertyChanged
     private string? _launchSig;
     private string? _launchIconKey;
     private ImageSource? _launchIcon;
+    private bool _isBackingUp;
 
     public ProfileListItem(BackupProfile profile)
     {
@@ -213,6 +214,18 @@ public sealed class ProfileListItem : INotifyPropertyChanged
     public BackupProfile Profile => _profile;
     public Guid Id => _profile.Id;
     public string Name => _profile.Name;
+
+    /// <summary>True while this profile is actively creating an archive in the UI session.</summary>
+    public bool IsBackingUp
+    {
+        get => _isBackingUp;
+        set
+        {
+            if (_isBackingUp == value) return;
+            _isBackingUp = value;
+            OnPropertyChanged();
+        }
+    }
 
     public bool IsWatchProcessRunning
     {
@@ -635,11 +648,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         private set => Set(ref _backupProgressTip, value);
     }
 
-    public void BeginBackupProgress()
+    private Guid? _backingUpProfileId;
+
+    public void BeginBackupProgress(Guid? profileId = null)
     {
-        BackupProgressPercent = 0;
-        BackupProgressTip = LocalizationService.Text("main.backupProgressTip", 0);
-        IsBackupProgressVisible = true;
+        if (!IsBackupProgressVisible)
+        {
+            BackupProgressPercent = 0;
+            BackupProgressTip = LocalizationService.Text("main.backupProgressTip", 0);
+            IsBackupProgressVisible = true;
+        }
+
+        SetBackingUpProfile(profileId);
     }
 
     public void ReportBackupProgress(BackupProgress progress)
@@ -654,6 +674,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsBackupProgressVisible = false;
         BackupProgressPercent = 0;
         BackupProgressTip = "";
+        SetBackingUpProfile(null);
+    }
+
+    /// <summary>Re-apply row spinner after the profiles list is rebuilt.</summary>
+    public void ReapplyBackingUpProfile() => SetBackingUpProfile(_backingUpProfileId, force: true);
+
+    private void SetBackingUpProfile(Guid? profileId, bool force = false)
+    {
+        if (!force && _backingUpProfileId == profileId)
+        {
+            if (profileId is Guid id)
+            {
+                var item = Profiles.FirstOrDefault(p => p.Id == id);
+                if (item is not null)
+                    item.IsBackingUp = true;
+            }
+
+            return;
+        }
+
+        _backingUpProfileId = profileId;
+        foreach (var p in Profiles)
+            p.IsBackingUp = profileId is Guid id && p.Id == id;
     }
 
     public bool HasProfile => SelectedProfile is not null;

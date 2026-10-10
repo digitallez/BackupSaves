@@ -327,28 +327,86 @@
                       </TextBlock.Style>
                     </TextBlock>
                   </StackPanel>
-                  <Grid Grid.Column="2" Margin="8,0,2,0" VerticalAlignment="Center">
-                    <Grid.Style>
-                      <Style TargetType="Grid">
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,2,0"
+                              VerticalAlignment="Center">
+                    <StackPanel.Style>
+                      <Style TargetType="StackPanel">
                         <Setter Property="Visibility" Value="Collapsed"/>
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding HasLaunchCommand}" Value="True">
                             <Setter Property="Visibility" Value="Visible"/>
                           </DataTrigger>
+                          <DataTrigger Binding="{Binding IsBackingUp}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                          </DataTrigger>
                         </Style.Triggers>
                       </Style>
-                    </Grid.Style>
+                    </StackPanel.Style>
+                    <!-- Spinning indicator while this profile creates an archive -->
+                    <Grid Width="18" Height="18" VerticalAlignment="Center"
+                          RenderTransformOrigin="0.5,0.5"
+                          ToolTip="{Binding DataContext.BackupProgressTip, RelativeSource={RelativeSource AncestorType=Window}}">
+                      <Grid.Style>
+                        <Style TargetType="Grid">
+                          <Setter Property="Visibility" Value="Collapsed"/>
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBackingUp}" Value="True">
+                              <Setter Property="Visibility" Value="Visible"/>
+                              <DataTrigger.EnterActions>
+                                <BeginStoryboard x:Name="ProfileBackupSpin">
+                                  <Storyboard RepeatBehavior="Forever">
+                                    <DoubleAnimation
+                                        Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                        From="0" To="360" Duration="0:0:0.75"/>
+                                  </Storyboard>
+                                </BeginStoryboard>
+                              </DataTrigger.EnterActions>
+                              <DataTrigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="ProfileBackupSpin"/>
+                              </DataTrigger.ExitActions>
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Grid.Style>
+                      <Grid.RenderTransform>
+                        <RotateTransform/>
+                      </Grid.RenderTransform>
+                      <Path Width="14" Height="14" Stretch="Uniform"
+                            Stroke="{DynamicResource ArchiveAgeCoolBrush}"
+                            StrokeThickness="2"
+                            StrokeStartLineCap="Round"
+                            StrokeEndLineCap="Round"
+                            Data="M 8,1 A 7,7 0 1 1 1.5,10.5"/>
+                    </Grid>
                     <Button Width="26" Height="24" Padding="0" MinWidth="0" MinHeight="0"
                             Focusable="False"
                             ToolTip="{Binding LaunchToolTip}"
                             ToolTipService.ShowOnDisabled="True"
                             IsEnabled="{Binding CanLaunch}"
                             Click="LaunchProfile_Click">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                          <Setter Property="Visibility" Value="Collapsed"/>
+                          <Setter Property="Margin" Value="0"/>
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasLaunchCommand}" Value="True">
+                              <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding HasLaunchCommand}" Value="True"/>
+                                <Condition Binding="{Binding IsBackingUp}" Value="True"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Margin" Value="4,0,0,0"/>
+                            </MultiDataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
                       <Path Width="9" Height="10" Stretch="Fill"
                             Data="M 0,0 L 0,10 L 8,5 Z"
                             Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                     </Button>
-                  </Grid>
+                  </StackPanel>
                 </Grid>
               </Border>
             </DataTemplate>

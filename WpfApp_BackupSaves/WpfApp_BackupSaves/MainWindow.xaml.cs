@@ -695,6 +695,7 @@ public partial class MainWindow : Window
         _vm.SelectedProfile = selectedId is Guid id
             ? _vm.Profiles.FirstOrDefault(p => p.Id == id)
             : _vm.Profiles.FirstOrDefault();
+        _vm.ReapplyBackingUpProfile();
         InvalidateTaskNextRunCache();
         RefreshProfilesLive();
     }
@@ -1414,8 +1415,7 @@ public partial class MainWindow : Window
         }
 
         _vm.IsBusy = true;
-        if (!_vm.IsBackupProgressVisible)
-            await ShowBackupProgressAsync();
+        await ShowBackupProgressAsync(profileId);
         var progress = CreateBackupProgress();
         try
         {
@@ -1507,9 +1507,10 @@ public partial class MainWindow : Window
     private async void BackupNow_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedProfile is null || _vm.IsBusy) return;
+        var profileId = _vm.SelectedProfile.Id;
         _vm.IsBusy = true;
         _vm.Status = LocalizationService.Text("status.backup");
-        await ShowBackupProgressAsync();
+        await ShowBackupProgressAsync(profileId);
         var progress = CreateBackupProgress();
         try
         {
@@ -1524,7 +1525,7 @@ public partial class MainWindow : Window
             }
 
             var result = await _runner.RunProfileAsync(
-                _vm.SelectedProfile.Id, RunTrigger.Manual, progress: progress, options: options);
+                profileId, RunTrigger.Manual, progress: progress, options: options);
             _app = await _settings.LoadAsync();
             await ReloadHistoryUiAsync();
             RefreshArchives();
@@ -1584,10 +1585,10 @@ public partial class MainWindow : Window
     private Progress<BackupProgress> CreateBackupProgress() =>
         new(p => _vm.ReportBackupProgress(p));
 
-    /// <summary>Show the archives progress bar and let WPF paint it before backup work blocks the UI.</summary>
-    private async Task ShowBackupProgressAsync()
+    /// <summary>Show the archives progress bar (and profile-row spinner) and let WPF paint before backup work.</summary>
+    private async Task ShowBackupProgressAsync(Guid? profileId = null)
     {
-        _vm.BeginBackupProgress();
+        _vm.BeginBackupProgress(profileId);
         // PropertyChanged alone is not enough: sync prep in BackupService can run on this
         // dispatcher before the next render pass, so the bar would stay invisible until later.
         await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Render);
