@@ -25,6 +25,7 @@
   "main.archives": "归档",
   "main.backupProgressTip": "正在创建归档… {0}%",
   "main.history": "历史",
+  "main.historyToggleTip": "显示或隐藏历史",
   "main.add": "添加",
   "main.edit": "编辑",
   "main.delete": "删除",

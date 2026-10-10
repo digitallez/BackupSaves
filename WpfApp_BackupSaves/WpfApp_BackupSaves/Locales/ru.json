@@ -25,6 +25,7 @@
   "main.archives": "Архивы",
   "main.backupProgressTip": "Создание архива… {0}%",
   "main.history": "История",
+  "main.historyToggleTip": "Показать или скрыть историю",
   "main.add": "Добавить",
   "main.edit": "Изменить",
   "main.delete": "Удалить",

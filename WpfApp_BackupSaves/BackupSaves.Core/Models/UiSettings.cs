@@ -86,4 +86,7 @@ public sealed class UiSettings
     /// When true, the profiles list shows only Enabled profiles; otherwise all profiles.
     /// </summary>
     public bool ShowOnlyActiveProfiles { get; set; }
+
+    /// <summary>When true, the History list and its header are visible.</summary>
+    public bool ShowHistory { get; set; } = true;
 }

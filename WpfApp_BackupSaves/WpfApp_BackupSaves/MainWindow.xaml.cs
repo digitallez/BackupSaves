@@ -336,6 +336,8 @@ public partial class MainWindow : Window
         UpdateThemeToggleCaption();
         RebuildTrayMenu();
         _vm.ShowOnlyActiveProfiles = _app.Ui.ShowOnlyActiveProfiles;
+        _vm.HistoryVisible = _app.Ui.ShowHistory;
+        ApplyHistoryColumnLayout();
         ReloadProfilesUi();
         await ReloadHistoryUiAsync();
         _watcher.Watch(_app.Profiles);
@@ -673,9 +675,12 @@ public partial class MainWindow : Window
     private void UpdateThemeToggleCaption()
     {
         // Icon shows the *other* theme (Brightness = light, QuietHours = dark)
-        ThemeToggleIcon.Text = ThemeManager.Current == AppTheme.Dark
+        var glyph = ThemeManager.Current == AppTheme.Dark
             ? "\uE706"  // Brightness → switch to light
             : "\uE708"; // QuietHours → switch to dark
+        ThemeToggleIcon.Text = glyph;
+        if (ThemeToggleIconCollapsed is not null)
+            ThemeToggleIconCollapsed.Text = glyph;
     }
 
     private void ReloadProfilesUi()
@@ -1701,6 +1706,29 @@ public partial class MainWindow : Window
 
     private void ArchivesFiltersToggle_Click(object sender, RoutedEventArgs e) =>
         _vm.ArchivesFiltersVisible = !_vm.ArchivesFiltersVisible;
+
+    private void HistoryVisibleToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _vm.HistoryVisible = !_vm.HistoryVisible;
+        _app.Ui.ShowHistory = _vm.HistoryVisible;
+        ApplyHistoryColumnLayout();
+        _ = _settings.SaveAsync(_app);
+    }
+
+    private void ApplyHistoryColumnLayout()
+    {
+        if (_vm.HistoryVisible)
+        {
+            HistoryColumn.Width = new GridLength(255);
+            HistorySpacerColumn.Width = new GridLength(12);
+        }
+        else
+        {
+            // Collapse fully so Archives extend to the right edge.
+            HistoryColumn.Width = new GridLength(0);
+            HistorySpacerColumn.Width = new GridLength(0);
+        }
+    }
 
     private void ArchiveDisplayName_GotFocus(object sender, RoutedEventArgs e)
     {

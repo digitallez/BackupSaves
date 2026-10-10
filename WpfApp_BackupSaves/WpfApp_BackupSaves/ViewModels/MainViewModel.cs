@@ -674,6 +674,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set => Set(ref _archivesFiltersVisible, value);
     }
 
+    private bool _historyVisible = true;
+    public bool HistoryVisible
+    {
+        get => _historyVisible;
+        set => Set(ref _historyVisible, value);
+    }
+
     private string _archiveFilterName = "";
     public string ArchiveFilterName
     {
