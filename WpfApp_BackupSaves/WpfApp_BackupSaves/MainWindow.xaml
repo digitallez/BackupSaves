@@ -138,12 +138,37 @@
 
     <Grid Margin="12" MouseLeftButtonDown="MainContent_MouseLeftButtonDown">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="255"/>
+        <ColumnDefinition x:Name="ProfilesColumn" Width="255" MinWidth="180" MaxWidth="900"/>
         <ColumnDefinition Width="12"/>
-        <ColumnDefinition Width="*"/>
+        <ColumnDefinition x:Name="ArchivesColumn" Width="*" MinWidth="240"/>
         <ColumnDefinition x:Name="HistorySpacerColumn" Width="12"/>
         <ColumnDefinition x:Name="HistoryColumn" Width="255"/>
       </Grid.ColumnDefinitions>
+
+      <GridSplitter x:Name="ProfilesSplitter"
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    ResizeDirection="Columns"
+                    ResizeBehavior="PreviousAndNext"
+                    ShowsPreview="False"
+                    FocusVisualStyle="{x:Null}"
+                    DragCompleted="ProfilesSplitter_DragCompleted">
+        <GridSplitter.Template>
+          <ControlTemplate TargetType="GridSplitter">
+            <Border Background="Transparent" Cursor="SizeWE" SnapsToDevicePixels="True">
+              <Rectangle x:Name="Grip" Width="1" HorizontalAlignment="Center"
+                         Fill="{DynamicResource BorderBrushKey}" Opacity="0.45"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Grip" Property="Width" Value="3"/>
+                <Setter TargetName="Grip" Property="Opacity" Value="1"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </GridSplitter.Template>
+      </GridSplitter>
 
       <!-- Profiles -->
       <DockPanel Grid.Column="0">

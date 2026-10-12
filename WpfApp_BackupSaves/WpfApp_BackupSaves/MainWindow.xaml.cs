@@ -50,6 +50,10 @@ public partial class MainWindow : Window
     private bool _placementReady;
     private ICollectionView? _archivesView;
 
+    private const double ProfilesPaneDefaultWidth = 255;
+    private const double ProfilesPaneMinWidth = 180;
+    private const double ProfilesPaneMaxWidth = 900;
+
     public MainWindow()
     {
         _settings = new SettingsStore();
@@ -178,6 +182,7 @@ public partial class MainWindow : Window
         try
         {
             _app = _settings.Load();
+            ApplyProfilesPaneWidth(_app.Ui.ProfilesPaneWidth);
             if (!WindowPlacement.TryApply(this, _app.Ui))
             {
                 // Invisible / missing monitor / no saved bounds → default centered layout.
@@ -338,6 +343,7 @@ public partial class MainWindow : Window
         _vm.ShowOnlyActiveProfiles = _app.Ui.ShowOnlyActiveProfiles;
         _vm.HistoryVisible = _app.Ui.ShowHistory;
         ApplyHistoryColumnLayout();
+        ApplyProfilesPaneWidth(_app.Ui.ProfilesPaneWidth);
         ReloadProfilesUi();
         await ReloadHistoryUiAsync();
         _watcher.Watch(_app.Profiles);
@@ -1713,6 +1719,27 @@ public partial class MainWindow : Window
         _vm.HistoryVisible = !_vm.HistoryVisible;
         _app.Ui.ShowHistory = _vm.HistoryVisible;
         ApplyHistoryColumnLayout();
+        _ = _settings.SaveAsync(_app);
+    }
+
+    private void ApplyProfilesPaneWidth(double width) =>
+        ProfilesColumn.Width = new GridLength(ClampProfilesPaneWidth(width));
+
+    private static double ClampProfilesPaneWidth(double width)
+    {
+        if (double.IsNaN(width) || double.IsInfinity(width) || width <= 0)
+            return ProfilesPaneDefaultWidth;
+        return Math.Clamp(width, ProfilesPaneMinWidth, ProfilesPaneMaxWidth);
+    }
+
+    private void ProfilesSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        // Splitter writes both neighbours as pixels; archives must stay star so the window can resize.
+        ArchivesColumn.Width = new GridLength(1, GridUnitType.Star);
+        if (e.Canceled || !ProfilesColumn.Width.IsAbsolute)
+            return;
+
+        _app.Ui.ProfilesPaneWidth = ClampProfilesPaneWidth(ProfilesColumn.Width.Value);
         _ = _settings.SaveAsync(_app);
     }
 

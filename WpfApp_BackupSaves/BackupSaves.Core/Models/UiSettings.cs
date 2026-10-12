@@ -89,4 +89,7 @@ public sealed class UiSettings
 
     /// <summary>When true, the History list and its header are visible.</summary>
     public bool ShowHistory { get; set; } = true;
+
+    /// <summary>Profiles list width in DIP. Values outside the allowed range fall back to the default.</summary>
+    public double ProfilesPaneWidth { get; set; } = 255;
 }
