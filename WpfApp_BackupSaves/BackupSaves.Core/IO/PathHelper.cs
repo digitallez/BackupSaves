@@ -33,10 +33,38 @@ public static class PathHelper
         return string.IsNullOrEmpty(slug) ? "profile" : slug;
     }
 
+    /// <summary>Stored slug, or <see cref="ToSlug"/> of the name when slug is empty.</summary>
+    public static string EffectiveSlug(BackupProfile profile) =>
+        string.IsNullOrWhiteSpace(profile.Slug) ? ToSlug(profile.Name) : profile.Slug;
+
+    /// <summary>
+    /// Returns <paramref name="desired"/> or <c>desired-2</c>, <c>desired-3</c>, … so it does not
+    /// collide with any other profile's <see cref="EffectiveSlug"/>.
+    /// </summary>
+    public static string EnsureUniqueSlug(string desired, Guid selfId, IEnumerable<BackupProfile> profiles)
+    {
+        var slug = string.IsNullOrWhiteSpace(desired) ? "profile" : desired;
+        if (!IsSlugTaken(slug, selfId, profiles))
+            return slug;
+
+        for (var n = 2; n < 10_000; n++)
+        {
+            var candidate = $"{slug}-{n}";
+            if (!IsSlugTaken(candidate, selfId, profiles))
+                return candidate;
+        }
+
+        return $"{slug}-{selfId:N}";
+    }
+
+    private static bool IsSlugTaken(string slug, Guid selfId, IEnumerable<BackupProfile> profiles) =>
+        profiles.Any(p => p.Id != selfId &&
+                          string.Equals(EffectiveSlug(p), slug, StringComparison.OrdinalIgnoreCase));
+
     public static string GetProfileArchiveDirectory(BackupProfile profile)
     {
         var root = ExpandPath(profile.BackupRoot);
-        return Path.Combine(root, profile.Slug);
+        return Path.Combine(root, EffectiveSlug(profile));
     }
 
     public static string GetArchiveExtension(ArchiveFormat format) =>
@@ -45,7 +73,7 @@ public static class PathHelper
     public static string BuildArchiveFileName(BackupProfile profile, DateTimeOffset createdLocal)
     {
         var stamp = createdLocal.ToString("yyyy-MM-dd_HH-mm-ss");
-        return $"{profile.Slug}_{stamp}{GetArchiveExtension(profile.Format)}";
+        return $"{EffectiveSlug(profile)}_{stamp}{GetArchiveExtension(profile.Format)}";
     }
 
     public static bool IsUnderDirectory(string path, string directory)
@@ -85,6 +113,32 @@ public static class PathHelper
         var name = Path.GetFileName(fileExpanded);
         var parent = Path.GetFileName(Path.GetDirectoryName(fileExpanded) ?? "file");
         return $"data/{parent}/{name}";
+    }
+
+    public static bool ContainsPathMask(string path) =>
+        !string.IsNullOrEmpty(path) && (path.Contains('*') || path.Contains('?'));
+
+    /// <summary>
+    /// Splits an expanded path whose <em>file name</em> contains <c>*</c>/<c>?</c>
+    /// into directory + pattern for <see cref="Directory.EnumerateFiles"/>.
+    /// Masks in folder segments are not supported.
+    /// </summary>
+    public static bool TryGetFileMask(string expandedPath, out string directory, out string pattern)
+    {
+        directory = "";
+        pattern = "";
+        if (string.IsNullOrWhiteSpace(expandedPath) || !ContainsPathMask(expandedPath))
+            return false;
+
+        pattern = Path.GetFileName(expandedPath);
+        directory = Path.GetDirectoryName(expandedPath) ?? "";
+        if (string.IsNullOrWhiteSpace(pattern) || string.IsNullOrWhiteSpace(directory))
+            return false;
+
+        if (!ContainsPathMask(pattern) || ContainsPathMask(directory))
+            return false;
+
+        return true;
     }
 }
 

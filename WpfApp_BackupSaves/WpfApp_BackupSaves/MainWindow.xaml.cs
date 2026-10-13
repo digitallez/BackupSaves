@@ -1453,7 +1453,7 @@ public partial class MainWindow : Window
 
     private async void AddProfile_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new ProfileEditWindow { Owner = this };
+        var dlg = new ProfileEditWindow(siblings: _app.Profiles) { Owner = this };
         if (dlg.ShowDialog() != true)
             return;
 
@@ -1471,10 +1471,47 @@ public partial class MainWindow : Window
     private async void EditProfile_Click(object sender, RoutedEventArgs e) =>
         await EditSelectedProfileAsync();
 
+    private async void CopyProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedProfile is null) return;
+
+        var source = _vm.SelectedProfile.Profile;
+        var copy = source.Clone(asNew: true);
+        copy.Name = MakeUniqueCopyName(source.Name);
+        // Localized "(копия)" often collapses via ToSlug to the same latin slug as the original —
+        // always branch from the source folder slug with an explicit "-copy" suffix.
+        copy.Slug = PathHelper.EnsureUniqueSlug(
+            PathHelper.EffectiveSlug(source) + "-copy", copy.Id, _app.Profiles);
+
+        _app.Profiles.Add(copy);
+        AppLog.Default.Info("Settings",
+            $"Profile copied: «{source.Name}» → «{copy.Name}» id={copy.Id:N} from={source.Id:N}");
+        await PersistAndSyncSchedulerAsync(copy);
+        EnsureInAppScheduler();
+        _inAppScheduler!.Start();
+        ReloadProfilesUi();
+        _vm.SelectedProfile = _vm.Profiles.FirstOrDefault(p => p.Id == copy.Id);
+        _vm.Status = LocalizationService.Text("status.profileCopied", copy.Name);
+    }
+
+    private string MakeUniqueCopyName(string baseName)
+    {
+        var candidate = LocalizationService.Text("main.copyNameFormat", baseName);
+        if (!_app.Profiles.Any(p => string.Equals(p.Name, candidate, StringComparison.OrdinalIgnoreCase)))
+            return candidate;
+
+        for (var n = 2; ; n++)
+        {
+            candidate = LocalizationService.Text("main.copyNameFormatN", baseName, n);
+            if (!_app.Profiles.Any(p => string.Equals(p.Name, candidate, StringComparison.OrdinalIgnoreCase)))
+                return candidate;
+        }
+    }
+
     private async Task EditSelectedProfileAsync()
     {
         if (_vm.SelectedProfile is null) return;
-        var dlg = new ProfileEditWindow(_vm.SelectedProfile.Profile) { Owner = this };
+        var dlg = new ProfileEditWindow(_vm.SelectedProfile.Profile, _app.Profiles) { Owner = this };
         if (dlg.ShowDialog() != true)
             return;
 

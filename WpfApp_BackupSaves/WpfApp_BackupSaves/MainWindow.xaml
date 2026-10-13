@@ -259,6 +259,8 @@
                         IsEnabled="{Binding CanInteract}"/>
               <MenuItem Header="{loc:Loc main.edit}" Click="EditProfile_Click"
                         IsEnabled="{Binding HasProfile}"/>
+              <MenuItem Header="{loc:Loc main.copy}" Click="CopyProfile_Click"
+                        IsEnabled="{Binding HasProfile}"/>
               <MenuItem Header="{loc:Loc main.delete}" Click="DeleteProfile_Click"
                         IsEnabled="{Binding HasProfile}"/>
               <MenuItem Header="{loc:Loc main.toggleProfileEnabled}"

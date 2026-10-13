@@ -55,4 +55,35 @@ public sealed class BackupProfile
 
     public List<SourceEntry> Sources { get; set; } = [];
     public ScheduleConfig Schedule { get; set; } = new();
+
+    /// <summary>
+    /// Deep copy. When <paramref name="asNew"/> is true — new Id and cleared runtime schedule/watch state.
+    /// </summary>
+    public BackupProfile Clone(bool asNew = false) => new()
+    {
+        Id = asNew ? Guid.NewGuid() : Id,
+        Name = Name,
+        Slug = Slug,
+        Enabled = Enabled,
+        BackupRoot = BackupRoot,
+        Format = Format,
+        RetentionCount = RetentionCount,
+        SkipUnchangedByChecksum = SkipUnchangedByChecksum,
+        WatchProcessEnabled = WatchProcessEnabled,
+        WatchProcessPattern = WatchProcessPattern,
+        WatchProcessScanSeconds = WatchProcessScanSeconds,
+        WatchProcessWasRunning = asNew ? false : WatchProcessWasRunning,
+        LaunchCommand = LaunchCommand,
+        Sources = Sources.Select(s => new SourceEntry { Path = s.Path, Type = s.Type }).ToList(),
+        Schedule = new ScheduleConfig
+        {
+            Enabled = Schedule.Enabled,
+            InAppEnabled = Schedule.InAppEnabled,
+            Kind = Schedule.Kind,
+            TimeOfDay = Schedule.TimeOfDay,
+            DaysOfWeek = Schedule.DaysOfWeek.ToList(),
+            IntervalMinutes = Schedule.IntervalMinutes,
+            LastInAppBackupUtc = asNew ? null : Schedule.LastInAppBackupUtc
+        }
+    };
 }

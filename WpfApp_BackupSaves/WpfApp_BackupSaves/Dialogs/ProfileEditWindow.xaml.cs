@@ -16,13 +16,16 @@ public partial class ProfileEditWindow : Window
 {
     public BackupProfile Profile { get; }
 
-    public ProfileEditWindow(BackupProfile? existing = null)
+    private readonly IReadOnlyList<BackupProfile> _siblings;
+
+    public ProfileEditWindow(BackupProfile? existing = null, IEnumerable<BackupProfile>? siblings = null)
     {
         InitializeComponent();
         CustomWindowChrome.Apply(this);
+        _siblings = siblings?.ToList() ?? [];
         Profile = existing is null
             ? new BackupProfile()
-            : Clone(existing);
+            : existing.Clone();
 
         ProfileEnabled.IsChecked = Profile.Enabled;
         NameBox.Text = Profile.Name;
@@ -66,34 +69,6 @@ public partial class ProfileEditWindow : Window
             _scheduleModeSync = false;
         }
     }
-
-    private static BackupProfile Clone(BackupProfile p) => new()
-    {
-        Id = p.Id,
-        Name = p.Name,
-        Slug = p.Slug,
-        Enabled = p.Enabled,
-        BackupRoot = p.BackupRoot,
-        Format = p.Format,
-        RetentionCount = p.RetentionCount,
-        SkipUnchangedByChecksum = p.SkipUnchangedByChecksum,
-        WatchProcessEnabled = p.WatchProcessEnabled,
-        WatchProcessPattern = p.WatchProcessPattern,
-        WatchProcessScanSeconds = p.WatchProcessScanSeconds,
-        WatchProcessWasRunning = p.WatchProcessWasRunning,
-        LaunchCommand = p.LaunchCommand,
-        Sources = p.Sources.Select(s => new SourceEntry { Path = s.Path, Type = s.Type }).ToList(),
-        Schedule = new ScheduleConfig
-        {
-            Enabled = p.Schedule.Enabled,
-            InAppEnabled = p.Schedule.InAppEnabled,
-            Kind = p.Schedule.Kind,
-            TimeOfDay = p.Schedule.TimeOfDay,
-            DaysOfWeek = p.Schedule.DaysOfWeek.ToList(),
-            IntervalMinutes = p.Schedule.IntervalMinutes,
-            LastInAppBackupUtc = p.Schedule.LastInAppBackupUtc
-        }
-    };
 
     private void BrowseRoot_Click(object sender, RoutedEventArgs e)
     {
@@ -262,6 +237,25 @@ public partial class ProfileEditWindow : Window
 
         try
         {
+            if (PathHelper.TryGetFileMask(path, out var maskDir, out _))
+            {
+                if (!Directory.Exists(maskDir))
+                {
+                    AppMessageBox.Show(this, LocalizationService.Text("profile.errSourceMissing", maskDir),
+                        LocalizationService.Text("common.appName"),
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{maskDir}\"",
+                    UseShellExecute = true
+                });
+                return;
+            }
+
             var isDir = s.Type == SourceType.Directory || Directory.Exists(path);
             if (isDir && !File.Exists(path))
             {
@@ -322,6 +316,12 @@ public partial class ProfileEditWindow : Window
     private static void InferSourceType(SourceEntry entry)
     {
         var expanded = PathHelper.ExpandPath(entry.Path);
+        if (PathHelper.ContainsPathMask(expanded) || PathHelper.ContainsPathMask(entry.Path))
+        {
+            entry.Type = SourceType.File;
+            return;
+        }
+
         if (Directory.Exists(expanded))
             entry.Type = SourceType.Directory;
         else if (File.Exists(expanded))
@@ -381,7 +381,8 @@ public partial class ProfileEditWindow : Window
 
         Profile.Enabled = ProfileEnabled.IsChecked == true;
         Profile.Name = NameBox.Text.Trim();
-        Profile.Slug = PathHelper.ToSlug(Profile.Name);
+        Profile.Slug = PathHelper.EnsureUniqueSlug(
+            PathHelper.ToSlug(Profile.Name), Profile.Id, _siblings);
         Profile.BackupRoot = RootBox.Text.Trim();
         Profile.RetentionCount = retention;
         Profile.SkipUnchangedByChecksum = ChecksumSkipBox.IsChecked == true;

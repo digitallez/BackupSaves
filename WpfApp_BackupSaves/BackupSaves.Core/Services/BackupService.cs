@@ -154,6 +154,47 @@ public sealed class BackupService : IBackupService
                 var template = source.Path;
                 var expanded = PathHelper.ExpandPath(template);
 
+                // File mask in the last path segment: ...\Hero*.savegame
+                if (PathHelper.ContainsPathMask(expanded))
+                {
+                    if (!PathHelper.TryGetFileMask(expanded, out var maskDir, out var maskPattern))
+                        return Fail(LocalizationService.Text("core.maskInvalid", template));
+
+                    if (PathHelper.IsUnderDirectory(maskDir, backupRoot) ||
+                        PathHelper.IsUnderDirectory(maskDir, archiveDir))
+                        return Fail(LocalizationService.Text("core.sourceOverlapsRoot", template));
+
+                    if (!Directory.Exists(maskDir))
+                        return Fail(LocalizationService.Text("core.folderNotFound", maskDir));
+
+                    var matches = Directory
+                        .EnumerateFiles(maskDir, maskPattern, SearchOption.TopDirectoryOnly)
+                        .ToList();
+                    if (matches.Count == 0)
+                        return Fail(LocalizationService.Text("core.maskNoMatch", template));
+
+                    var dirTemplate = Path.GetDirectoryName(template.TrimEnd('\\', '/')) ?? template;
+                    foreach (var file in matches)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        var archivePath = PathHelper.ToArchiveRelativeFile(file);
+                        if (!PathHelper.IsSafeArchivePath(archivePath))
+                            return Fail(LocalizationService.Text("core.badArchivePath", archivePath));
+
+                        var fileTemplate = CombineTemplate(dirTemplate, Path.GetFileName(file));
+                        files.Add((archivePath, file, fileTemplate, maskDir));
+                        manifestEntries.Add(new ManifestEntry
+                        {
+                            SourcePath = file,
+                            SourcePathTemplate = fileTemplate,
+                            ArchivePath = archivePath,
+                            Type = SourceType.File
+                        });
+                    }
+
+                    continue;
+                }
+
                 if (PathHelper.IsUnderDirectory(expanded, backupRoot) || PathHelper.IsUnderDirectory(expanded, archiveDir))
                     return Fail(LocalizationService.Text("core.sourceOverlapsRoot", template));
 
