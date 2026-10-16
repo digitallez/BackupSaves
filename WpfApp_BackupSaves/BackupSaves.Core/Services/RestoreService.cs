@@ -9,7 +9,12 @@ namespace BackupSaves.Core.Services;
 public interface IRestoreService
 {
     Task<Manifest?> ReadManifestAsync(string archivePath, CancellationToken ct = default);
-    Task<RestoreResult> RestoreAsync(string archivePath, bool overwrite, CancellationToken ct = default);
+    Task<RestoreResult> RestoreAsync(
+        string archivePath,
+        bool overwrite,
+        CancellationToken ct = default,
+        IProgress<RestoreProgress>? progress = null,
+        PauseGate? pause = null);
 }
 
 public sealed class RestoreService : IRestoreService
@@ -31,7 +36,12 @@ public sealed class RestoreService : IRestoreService
         }, ct);
     }
 
-    public async Task<RestoreResult> RestoreAsync(string archivePath, bool overwrite, CancellationToken ct = default)
+    public async Task<RestoreResult> RestoreAsync(
+        string archivePath,
+        bool overwrite,
+        CancellationToken ct = default,
+        IProgress<RestoreProgress>? progress = null,
+        PauseGate? pause = null)
     {
         AppLog.Default.Info("Restore", $"Start: archive=\"{archivePath}\" overwrite={overwrite}");
 
@@ -50,6 +60,7 @@ public sealed class RestoreService : IRestoreService
 
         var errors = new List<RestoreFileError>();
         var restored = 0;
+        var total = manifest.Entries.Count;
 
         try
         {
@@ -61,9 +72,12 @@ public sealed class RestoreService : IRestoreService
                     .GroupBy(e => NormalizeKey(e.Key!), StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
+                var index = 0;
                 foreach (var item in manifest.Entries)
                 {
+                    pause?.WaitIfPaused(ct);
                     ct.ThrowIfCancellationRequested();
+                    index++;
 
                     if (!PathHelper.IsSafeArchivePath(item.ArchivePath))
                     {
@@ -72,6 +86,7 @@ public sealed class RestoreService : IRestoreService
                             SourcePath = item.SourcePath,
                             Message = LocalizationService.Text("core.restoreUnsafePath", item.ArchivePath)
                         });
+                        progress?.Report(new RestoreProgress(index, total, item.SourcePath));
                         continue;
                     }
 
@@ -83,6 +98,7 @@ public sealed class RestoreService : IRestoreService
                             SourcePath = item.SourcePath,
                             Message = LocalizationService.Text("core.restoreMissingInArchive")
                         });
+                        progress?.Report(new RestoreProgress(index, total, item.SourcePath));
                         continue;
                     }
 
@@ -103,6 +119,7 @@ public sealed class RestoreService : IRestoreService
                                 SourcePath = target,
                                 Message = LocalizationService.Text("core.restoreExistsNoOverwrite")
                             });
+                            progress?.Report(new RestoreProgress(index, total, target));
                             continue;
                         }
 
@@ -115,6 +132,7 @@ public sealed class RestoreService : IRestoreService
 
                         File.Move(tmp, target, overwrite: true);
                         restored++;
+                        progress?.Report(new RestoreProgress(index, total, target));
                     }
                     catch (Exception ex)
                     {
@@ -123,6 +141,7 @@ public sealed class RestoreService : IRestoreService
                             SourcePath = target,
                             Message = ex.Message
                         });
+                        progress?.Report(new RestoreProgress(index, total, target));
                     }
                 }
             }, ct);

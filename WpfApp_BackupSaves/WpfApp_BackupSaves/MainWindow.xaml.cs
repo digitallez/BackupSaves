@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Threading;
 using BackupSaves.Core.IO;
 using BackupSaves.Core.Models;
@@ -1642,46 +1643,78 @@ public partial class MainWindow : Window
         await RestoreSelectedArchiveAsync();
     }
 
-    private async Task RestoreSelectedArchiveAsync()
+    private Task RestoreSelectedArchiveAsync()
     {
-        if (_vm.SelectedArchive is null || _vm.IsBusy) return;
+        if (!_vm.HasSingleArchive || _vm.SelectedArchive is null || _vm.IsBusy)
+            return Task.CompletedTask;
 
+        var archive = _vm.SelectedArchive;
         var confirm = AppMessageBox.Show(this,
-            LocalizationService.Text("msg.restoreConfirm", _vm.SelectedArchive.ListTitle),
+            LocalizationService.Text("msg.restoreConfirm", archive.ListTitle),
             LocalizationService.Text("msg.restoreTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes)
         {
             AppLog.Default.Info("Restore", "User cancelled confirm");
-            return;
+            return Task.CompletedTask;
         }
 
-        AppLog.Default.Info("Restore", $"UI restore: \"{_vm.SelectedArchive.Path}\"");
+        AppLog.Default.Info("Restore", $"UI restore: \"{archive.Path}\"");
         _vm.IsBusy = true;
         _vm.Status = LocalizationService.Text("status.restoring");
+
+        var progressDlg = new OperationProgressWindow(
+            LocalizationService.Text("msg.restoreTitle"),
+            LocalizationService.Text("progress.restoring"),
+            closeWhenCompleted: false)
+        {
+            Owner = this
+        };
+
         try
         {
-            var result = await _restore.RestoreAsync(_vm.SelectedArchive.Path, overwrite: true);
-            if (result.Success)
+            progressDlg.ShowDialogAndRun(async (dlg, ct) =>
             {
-                _vm.Status = LocalizationService.Text("status.restored", result.RestoredCount);
-                AppMessageBox.Show(this, LocalizationService.Text("msg.restoreOk", result.RestoredCount),
-                    LocalizationService.Text("msg.restoreTitle"),
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            else
+                var progress = new Progress<RestoreProgress>(p =>
+                {
+                    dlg.Report(p.Done, p.Total,
+                        LocalizationService.Text("progress.restoringItem", p.Done, p.Total));
+                });
+
+                var result = await _restore.RestoreAsync(
+                    archive.Path,
+                    overwrite: true,
+                    ct,
+                    progress,
+                    dlg.PauseGate);
+
+                if (result.Success)
+                {
+                    _vm.Status = LocalizationService.Text("status.restored", result.RestoredCount);
+                    dlg.ShowCompleted(LocalizationService.Text("progress.restoreDone", result.RestoredCount));
+                }
+                else
+                {
+                    var details = result.ErrorMessage ?? LocalizationService.Text("msg.restoreErrors");
+                    if (result.Errors.Count > 0)
+                        details += "\n\n" + string.Join("\n",
+                            result.Errors.Take(15).Select(x => $"{x.SourcePath}: {x.Message}"));
+                    _vm.Status = details.Split('\n')[0];
+                    dlg.ShowCompleted(details, success: false);
+                }
+            });
+
+            if (progressDlg.WasCancelled)
             {
-                var details = result.ErrorMessage ?? "";
-                if (result.Errors.Count > 0)
-                    details += "\n\n" + string.Join("\n", result.Errors.Take(15).Select(x => $"{x.SourcePath}: {x.Message}"));
-                _vm.Status = details.Split('\n')[0];
-                AppMessageBox.Show(this, details, LocalizationService.Text("msg.restoreErrors"),
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppLog.Default.Info("Restore", "UI restore cancelled");
+                _vm.Status = LocalizationService.Text("progress.restoreCancelled");
             }
         }
         finally
         {
             _vm.IsBusy = false;
         }
+
+        return Task.CompletedTask;
     }
 
     private void ArchivesList_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1690,8 +1723,31 @@ public partial class MainWindow : Window
         while (dep is not null && dep is not System.Windows.Controls.ListBoxItem)
             dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
 
-        if (dep is System.Windows.Controls.ListBoxItem item)
+        if (dep is not System.Windows.Controls.ListBoxItem item)
+            return;
+
+        // Explorer-like: right-click on already-selected row keeps multi-selection.
+        if (!item.IsSelected)
+        {
+            ArchivesList.SelectedItems.Clear();
             item.IsSelected = true;
+        }
+    }
+
+    private void ArchivesList_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.A && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            ArchivesList.SelectAll();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Delete)
+        {
+            ArchiveDelete_Click(sender, e);
+            e.Handled = true;
+        }
     }
 
     private void ProfilesList_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1706,11 +1762,39 @@ public partial class MainWindow : Window
 
     private void ArchivesList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        _ = LoadSelectedArchiveDetailsAsync();
+        _vm.SelectedArchiveCount = ArchivesList.SelectedItems.Count;
+        UpdateArchiveSelectionStatus();
+        if (_vm.HasSingleArchive)
+            _ = LoadSelectedArchiveDetailsAsync();
+    }
+
+    private void UpdateArchiveSelectionStatus()
+    {
+        if (_vm.IsBusy)
+            return;
+
+        var count = ArchivesList.SelectedItems.Count;
+        if (count <= 0)
+        {
+            _vm.SetReadyStatus();
+            return;
+        }
+
+        long totalBytes = 0;
+        foreach (ArchiveListItem item in ArchivesList.SelectedItems)
+            totalBytes += item.SizeBytes;
+
+        _vm.Status = LocalizationService.Text(
+            "status.archivesSelected",
+            count,
+            ArchiveListItem.FormatSize(totalBytes));
     }
 
     private async Task LoadSelectedArchiveDetailsAsync()
     {
+        if (!_vm.HasSingleArchive)
+            return;
+
         var archive = _vm.SelectedArchive;
         if (archive is null)
             return;
@@ -2249,29 +2333,103 @@ public partial class MainWindow : Window
 
     private void ArchiveDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (_vm.SelectedArchive is null || _vm.IsBusy) return;
+        if (_vm.IsBusy || ArchivesList.SelectedItems.Count == 0) return;
 
-        var name = _vm.SelectedArchive.Name;
-        var path = _vm.SelectedArchive.Path;
-        if (AppMessageBox.Show(this,
-                LocalizationService.Text("msg.deleteArchive", name),
-                LocalizationService.Text("msg.deleteArchiveTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        var items = ArchivesList.SelectedItems.Cast<ArchiveListItem>().ToList();
+        if (items.Count == 0) return;
+
+        string confirmText;
+        string confirmTitle;
+        if (items.Count == 1)
+        {
+            confirmText = LocalizationService.Text("msg.deleteArchive", items[0].Name);
+            confirmTitle = LocalizationService.Text("msg.deleteArchiveTitle");
+        }
+        else
+        {
+            confirmText = LocalizationService.Text("msg.deleteArchives", items.Count);
+            confirmTitle = LocalizationService.Text("msg.deleteArchivesTitle");
+        }
+
+        if (AppMessageBox.Show(this, confirmText, confirmTitle,
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
+
+        _vm.IsBusy = true;
+        var errors = new List<string>();
+        var deleted = 0;
+
+        var progressDlg = new OperationProgressWindow(
+            confirmTitle,
+            LocalizationService.Text("progress.deleting"),
+            closeWhenCompleted: true)
+        {
+            Owner = this
+        };
 
         try
         {
-            if (File.Exists(path))
-                File.Delete(path);
-            ArchiveMetaStore.DeleteForArchive(path);
-            AppLog.Default.Info("App", $"Archive deleted: \"{path}\"");
-            _vm.Status = LocalizationService.Text("status.deleted", name);
+            progressDlg.ShowDialogAndRun(async (dlg, ct) =>
+            {
+                // Background thread so PauseGate.WaitIfPaused does not freeze the UI.
+                await Task.Run(() =>
+                {
+                    var total = items.Count;
+                    for (var i = 0; i < total; i++)
+                    {
+                        dlg.PauseGate.WaitIfPaused(ct);
+                        ct.ThrowIfCancellationRequested();
+
+                        var item = items[i];
+                        dlg.Report(i, total,
+                            LocalizationService.Text("progress.deletingItem", i + 1, total));
+
+                        try
+                        {
+                            if (File.Exists(item.Path))
+                                File.Delete(item.Path);
+                            ArchiveMetaStore.DeleteForArchive(item.Path);
+                            deleted++;
+                            AppLog.Default.Info("App", $"Archive deleted: \"{item.Path}\"");
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            AppLog.Default.Error("App", $"Delete archive failed: \"{item.Path}\"", ex);
+                            lock (errors)
+                                errors.Add($"{item.Name}: {ex.Message}");
+                        }
+
+                        dlg.Report(i + 1, total,
+                            LocalizationService.Text("progress.deletingItem", i + 1, total));
+                    }
+                }, ct).ConfigureAwait(true);
+            });
+
+            if (progressDlg.WasCancelled)
+                AppLog.Default.Info("App", "Archive delete cancelled");
+        }
+        finally
+        {
+            _vm.IsBusy = false;
             RefreshArchives();
         }
-        catch (Exception ex)
+
+        if (deleted > 0)
         {
-            AppLog.Default.Error("App", $"Delete archive failed: \"{path}\"", ex);
-            AppMessageBox.Show(this, LocalizationService.Text("msg.deleteArchiveFailed", ex.Message),
-                LocalizationService.Text("msg.deleteArchiveTitle"),
+            _vm.Status = items.Count == 1 && deleted == 1
+                ? LocalizationService.Text("status.deleted", items[0].Name)
+                : LocalizationService.Text("status.deletedMany", deleted);
+        }
+
+        if (errors.Count > 0)
+        {
+            AppMessageBox.Show(this,
+                LocalizationService.Text("msg.deleteArchiveFailed", string.Join("\n", errors.Take(10))),
+                confirmTitle,
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

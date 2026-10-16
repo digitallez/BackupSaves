@@ -545,8 +545,8 @@
               </Border>
             </Popup>
             <Button Height="24" Padding="8,0" MinWidth="0" MinHeight="0"
-                    Click="Restore_Click" IsEnabled="{Binding HasArchive}"
-                    ToolTip="{loc:Loc main.restore}">
+                     Click="Restore_Click" IsEnabled="{Binding HasSingleArchive}"
+                     ToolTip="{loc:Loc main.restore}">
               <StackPanel Orientation="Horizontal">
                 <TextBlock Text="&#xE777;" FontFamily="Segoe MDL2 Assets" FontSize="13"
                            VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -808,9 +808,9 @@
             <Style TargetType="Border">
               <Setter Property="Visibility" Value="Collapsed"/>
               <Style.Triggers>
-                <DataTrigger Binding="{Binding HasArchive}" Value="True">
-                  <Setter Property="Visibility" Value="Visible"/>
-                </DataTrigger>
+                <DataTrigger Binding="{Binding HasSingleArchive}" Value="True">
+                   <Setter Property="Visibility" Value="Visible"/>
+                 </DataTrigger>
               </Style.Triggers>
             </Style>
           </Border.Style>
@@ -892,24 +892,26 @@
           </ScrollViewer>
         </Border>
          <ListBox x:Name="ArchivesList"
-                  ItemsSource="{Binding Archives}" SelectedItem="{Binding SelectedArchive}"
-                  VirtualizingPanel.ScrollUnit="Pixel"
-                  HorizontalContentAlignment="Stretch"
-                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                  SelectionChanged="ArchivesList_SelectionChanged"
-                  MouseDoubleClick="ArchivesList_MouseDoubleClick"
-                  PreviewMouseRightButtonDown="ArchivesList_PreviewMouseRightButtonDown">
-          <ListBox.ContextMenu>
-            <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-              <MenuItem Header="{loc:Loc main.restore}" Click="Restore_Click"
-                        IsEnabled="{Binding HasArchive}"/>
-              <MenuItem Header="{loc:Loc main.revealInExplorer}" Click="ArchiveRevealInExplorer_Click"
-                        IsEnabled="{Binding HasArchive}"/>
-              <Separator/>
-              <MenuItem Header="{loc:Loc main.delete}" Click="ArchiveDelete_Click"
-                        IsEnabled="{Binding HasArchive}"/>
-            </ContextMenu>
-          </ListBox.ContextMenu>
+                   ItemsSource="{Binding Archives}" SelectedItem="{Binding SelectedArchive}"
+                   SelectionMode="Extended"
+                   VirtualizingPanel.ScrollUnit="Pixel"
+                   HorizontalContentAlignment="Stretch"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   SelectionChanged="ArchivesList_SelectionChanged"
+                   MouseDoubleClick="ArchivesList_MouseDoubleClick"
+                   PreviewKeyDown="ArchivesList_PreviewKeyDown"
+                   PreviewMouseRightButtonDown="ArchivesList_PreviewMouseRightButtonDown">
+           <ListBox.ContextMenu>
+             <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+               <MenuItem Header="{loc:Loc main.restore}" Click="Restore_Click"
+                         IsEnabled="{Binding HasSingleArchive}"/>
+               <MenuItem Header="{loc:Loc main.revealInExplorer}" Click="ArchiveRevealInExplorer_Click"
+                         IsEnabled="{Binding HasSingleArchive}"/>
+               <Separator/>
+               <MenuItem Header="{loc:Loc main.delete}" Click="ArchiveDelete_Click"
+                         IsEnabled="{Binding HasArchivesSelected}"/>
+             </ContextMenu>
+           </ListBox.ContextMenu>
            <ListBox.ItemTemplate>
              <DataTemplate>
                <Border BorderThickness="3,0,0,0" Padding="0,1,0,1" Margin="0,1">

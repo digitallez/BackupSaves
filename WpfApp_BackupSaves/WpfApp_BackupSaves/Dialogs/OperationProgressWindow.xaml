@@ -1,0 +1,55 @@
+<Window x:Class="WpfApp_BackupSaves.Dialogs.OperationProgressWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:WpfApp_BackupSaves.Controls"
+        xmlns:loc="clr-namespace:WpfApp_BackupSaves.Markup"
+        Title="BackupSaves"
+        Width="440" MinWidth="360" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Icon="pack://application:,,,/Assets/app.ico"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource PrimaryTextBrush}">
+  <DockPanel>
+    <controls:CustomTitleBar x:Name="TitleBar" DockPanel.Dock="Top" ShowMaximize="False"/>
+
+    <StackPanel Margin="20">
+      <TextBlock x:Name="StatusBlock"
+                 TextWrapping="Wrap"
+                 FontSize="13"
+                 Margin="0,0,0,12"/>
+
+      <ProgressBar x:Name="Bar"
+                   Height="10"
+                   Minimum="0"
+                   Maximum="100"
+                   Value="0"
+                   Margin="0,0,0,16"/>
+
+      <StackPanel x:Name="RunningButtons"
+                  Orientation="Horizontal"
+                  HorizontalAlignment="Right">
+        <Button x:Name="PauseButton"
+                MinWidth="96" Height="34" Margin="0,0,8,0"
+                Click="Pause_Click"
+                Content="{loc:Loc common.pause}"/>
+        <Button x:Name="CancelButton"
+                MinWidth="96" Height="34"
+                IsCancel="True"
+                Click="Cancel_Click"
+                Content="{loc:Loc common.cancel}"/>
+      </StackPanel>
+
+      <StackPanel x:Name="CompletedButtons"
+                  Orientation="Horizontal"
+                  HorizontalAlignment="Right"
+                  Visibility="Collapsed">
+        <Button MinWidth="96" Height="34"
+                IsDefault="True"
+                Click="Close_Click"
+                Content="{loc:Loc common.ok}"/>
+      </StackPanel>
+    </StackPanel>
+  </DockPanel>
+</Window>

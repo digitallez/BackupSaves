@@ -24,9 +24,12 @@ public sealed class ArchiveListItem : INotifyPropertyChanged
     public string Name { get; init; } = "";
     public DateTime LastWriteTime { get; init; }
     public long SizeBytes { get; init; }
-    public string SizeDisplay => SizeBytes < 1024 * 1024
-        ? $"{SizeBytes / 1024.0:0.0} KB"
-        : $"{SizeBytes / (1024.0 * 1024):0.00} MB";
+    public string SizeDisplay => FormatSize(SizeBytes);
+
+    public static string FormatSize(long bytes) =>
+        bytes < 1024L * 1024
+            ? $"{bytes / 1024.0:0.0} KB"
+            : $"{bytes / (1024.0 * 1024):0.00} MB";
 
     /// <summary>
     /// Age dot: &lt;5m green, &lt;15m yellow, &lt;30m blue, &lt;60m time color, else date color.
@@ -586,14 +589,41 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _selectedArchive;
         set
         {
-            var had = _selectedArchive is not null;
+            var hadSingle = HasSingleArchive;
+            var hadAny = HasArchivesSelected;
             if (!Set(ref _selectedArchive, value))
                 return;
-            // Only notify when presence flips — spurious HasArchive raises
-            // re-run the detail Border Visibility DataTrigger (Collapsed↔Visible blink).
-            if (had != (value is not null))
-                OnPropertyChanged(nameof(HasArchive));
+            NotifyArchiveSelectionFlags(hadSingle, hadAny);
         }
+    }
+
+    private int _selectedArchiveCount;
+    /// <summary>Number of selected rows in the archives list (Extended multi-select).</summary>
+    public int SelectedArchiveCount
+    {
+        get => _selectedArchiveCount;
+        set
+        {
+            var hadSingle = HasSingleArchive;
+            var hadAny = HasArchivesSelected;
+            if (!Set(ref _selectedArchiveCount, value))
+                return;
+            NotifyArchiveSelectionFlags(hadSingle, hadAny);
+        }
+    }
+
+    private void NotifyArchiveSelectionFlags(bool hadSingle, bool hadAny)
+    {
+        // Only notify when presence flips — spurious raises re-run
+        // the detail Border Visibility DataTrigger (Collapsed↔Visible blink).
+        if (hadSingle != HasSingleArchive)
+        {
+            OnPropertyChanged(nameof(HasSingleArchive));
+            OnPropertyChanged(nameof(HasArchive));
+        }
+
+        if (hadAny != HasArchivesSelected)
+            OnPropertyChanged(nameof(HasArchivesSelected));
     }
 
     private string _status = "";
@@ -707,7 +737,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _backupUnconditional;
         set => Set(ref _backupUnconditional, value);
     }
-    public bool HasArchive => SelectedArchive is not null;
+    /// <summary>Exactly one archive selected — restore / reveal / details panel.</summary>
+    public bool HasSingleArchive => _selectedArchiveCount == 1 && SelectedArchive is not null;
+
+    /// <summary>Alias for bindings that mean “single archive actions”.</summary>
+    public bool HasArchive => HasSingleArchive;
+
+    /// <summary>One or more archives selected — delete and multi-select chrome.</summary>
+    public bool HasArchivesSelected => _selectedArchiveCount > 0;
+
     public bool CanInteract => !IsBusy;
 
     private bool _archivesFiltersVisible;
